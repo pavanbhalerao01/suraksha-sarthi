@@ -203,6 +203,10 @@ model User {
   
   isActive          Boolean  @default(true)
   lastLogin         DateTime?
+
+  // OTP fields
+  otp              String?
+  otpExpires       DateTime?
   
   // Relationships
   profile           UserProfile?

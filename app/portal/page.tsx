@@ -82,7 +82,7 @@ export default function PortalSelectionPage() {
       description: 'For pre-registered and verified volunteers to receive task assignments',
       icon: Users,
       color: 'green',
-      href: '/volunteer',
+        href: '/volunteer/auth/login',
       features: [
         'Skill-based task matching',
         'Check-in/check-out',

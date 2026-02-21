@@ -94,29 +94,39 @@ export default function VolunteerPortal() {
               </div>
             </div>
             <div className="flex items-center gap-4">
-              {!isOnDuty ? (
-                <button 
-                  onClick={handleCheckIn}
-                  className="px-6 py-2 bg-white text-green-600 rounded-lg font-semibold hover:bg-green-50 transition flex items-center gap-2"
+                {!isOnDuty ? (
+                  <button 
+                    onClick={handleCheckIn}
+                    className="px-6 py-2 bg-white text-green-600 rounded-lg font-semibold hover:bg-green-50 transition flex items-center gap-2"
+                  >
+                    <LogIn className="w-4 h-4" />
+                    Check In
+                  </button>
+                ) : (
+                  <button 
+                    onClick={handleCheckOut}
+                    className="px-6 py-2 bg-green-700 text-white rounded-lg font-semibold hover:bg-green-800 transition flex items-center gap-2"
+                  >
+                    <LogOut className="w-4 h-4" />
+                    Check Out
+                  </button>
+                )}
+                <Link 
+                  href="/portal" 
+                  className="px-4 py-2 bg-green-700 rounded-lg hover:bg-green-800 transition text-sm"
                 >
-                  <LogIn className="w-4 h-4" />
-                  Check In
-                </button>
-              ) : (
-                <button 
-                  onClick={handleCheckOut}
-                  className="px-6 py-2 bg-green-700 text-white rounded-lg font-semibold hover:bg-green-800 transition flex items-center gap-2"
+                  Switch Portal
+                </Link>
+                <button
+                  onClick={() => {
+                    localStorage.clear();
+                    sessionStorage.clear();
+                    window.location.href = "/volunteer/auth/login";
+                  }}
+                  className="px-4 py-2 bg-red-600 rounded-lg hover:bg-red-700 transition text-sm text-white"
                 >
-                  <LogOut className="w-4 h-4" />
-                  Check Out
+                  Logout
                 </button>
-              )}
-              <Link 
-                href="/portal" 
-                className="px-4 py-2 bg-green-700 rounded-lg hover:bg-green-800 transition text-sm"
-              >
-                Switch Portal
-              </Link>
             </div>
           </div>
         </div>
