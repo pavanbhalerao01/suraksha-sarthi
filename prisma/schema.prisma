@@ -155,41 +155,11 @@ model WeatherData {
 }
 
 // ==================== MULTI-USER SYSTEM ====================
-
-enum UserRole {
-  NDRF_ADMIN      // Full access to coordination dashboard
-  COLLECTOR       // District Collector view-only + direct NDRF communication
-  CITIZEN         // SOS and incident reporting
-  VOLUNTEER       // Task assignment and check-in
-  NGO             // Resource contribution and tracking
-}
-
-enum VolunteerStatus {
-  PENDING         // Registration submitted
-  VERIFIED        // Ward office verified
-  ACTIVE          // Available for deployment
-  ON_DUTY         // Currently deployed
-  INACTIVE        // Not available
-  SUSPENDED       // Suspended by authority
-}
-
-enum IncidentStatus {
-  REPORTED        // Just reported by citizen
-  VERIFIED        // Verified by authority
-  ASSIGNED        // Team assigned
-  IN_PROGRESS     // Team on site
-  RESOLVED        // Incident resolved
-  CLOSED          // Closed by authority
-}
-
-enum TaskStatus {
-  PENDING         // Task created
-  ASSIGNED        // Assigned to volunteer
-  ACCEPTED        // Volunteer accepted
-  IN_PROGRESS     // Volunteer checked in
-  COMPLETED       // Task completed
-  VERIFIED        // Verified by authority
-}
+// Note: SQLite doesn't support enums, using String instead
+// Valid values for role: NDRF_ADMIN, COLLECTOR, CITIZEN, VOLUNTEER, NGO
+// Valid values for volunteerStatus: PENDING, VERIFIED, ACTIVE, ON_DUTY, INACTIVE, SUSPENDED
+// Valid values for incidentStatus: REPORTED, VERIFIED, ASSIGNED, IN_PROGRESS, RESOLVED, CLOSED
+// Valid values for taskStatus: PENDING, ASSIGNED, ACCEPTED, IN_PROGRESS, COMPLETED, VERIFIED
 
 // User accounts with role-based access
 model User {
@@ -198,7 +168,7 @@ model User {
   phone             String?  @unique
   passwordHash      String
   
-  role              UserRole
+  role              String  // NDRF_ADMIN, COLLECTOR, CITIZEN, VOLUNTEER, NGO
   name              String
   
   isActive          Boolean  @default(true)
@@ -266,7 +236,7 @@ model Incident {
   title           String
   description     String
   
-  status          IncidentStatus  @default(REPORTED)
+  status          String          @default("REPORTED") // REPORTED, VERIFIED, ASSIGNED, IN_PROGRESS, RESOLVED, CLOSED
   severity        String          // 'low', 'medium', 'high', 'critical'
   
   location        String          // GeoJSON point { lat, lng }
@@ -304,7 +274,7 @@ model Volunteer {
   userId          String          @unique
   user            User            @relation(fields: [userId], references: [id], onDelete: Cascade)
   
-  status          VolunteerStatus @default(PENDING)
+  status          String          @default("PENDING") // PENDING, VERIFIED, ACTIVE, ON_DUTY, INACTIVE, SUSPENDED
   
   // Skills (stored as JSON array)
   skills          String          // ["first_aid", "swimming", "driving"]
@@ -343,7 +313,7 @@ model Task {
   title           String
   description     String
   
-  status          TaskStatus  @default(PENDING)
+  status          String      @default("PENDING") // PENDING, ASSIGNED, ACCEPTED, IN_PROGRESS, COMPLETED, VERIFIED
   type            String      // 'rescue', 'relief_distribution', 'medical_assistance'
   
   location        String      // GeoJSON point
@@ -424,5 +394,47 @@ model Resource {
   @@index([ngoId])
   @@index([status])
   @@index([regionId])
+}
+
+// SOS Alerts sent to volunteers
+model SosAlert {
+  id                String      @id @default(cuid())
+  
+  // Incident details
+  incidentId        String      // Reference to the disaster/incident
+  disasterType      String      // 'flood', 'fire', 'building_collapse', etc.
+  title             String
+  description       String
+  severity          String      // 'low', 'medium', 'high', 'critical'
+  
+  // Location details
+  location          String      // GeoJSON point { lat, lng }
+  address           String
+  
+  // Complainant/Reporter details
+  reporterName      String
+  reporterPhone     String
+  
+  // Required skills for this disaster
+  requiredSkills    String      // JSON array: ["diver", "swimmer", "boat_operator"]
+  
+  // Alert metadata
+  sentBy            String      // Admin user ID who triggered the SOS
+  sentAt            DateTime    @default(now())
+  
+  // Volunteers notified (stored as JSON array of volunteer IDs)
+  volunteersNotified String     // ["vol-id-1", "vol-id-2", "vol-id-3"]
+  totalVolunteersNotified Int   @default(0)
+  
+  // Response tracking
+  volunteersResponded  String?  // JSON array of volunteer IDs who responded
+  totalVolunteersResponded Int  @default(0)
+  
+  createdAt         DateTime    @default(now())
+  updatedAt         DateTime    @updatedAt
+  
+  @@index([incidentId])
+  @@index([sentAt])
+  @@index([disasterType])
 }
 

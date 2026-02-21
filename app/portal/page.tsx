@@ -35,7 +35,7 @@ export default function PortalSelectionPage() {
       description: 'Full coordination dashboard for NDRF officials to manage all disaster response operations',
       icon: Shield,
       color: 'blue',
-      href: '/dashboard',
+      href: '/ndrf-admin',
       features: [
         'Live coordination map',
         'Incident management',

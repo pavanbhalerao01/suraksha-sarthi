@@ -40,7 +40,6 @@ import {
   Brain,
   ShieldCheck,
   Info,
-  PhoneCall,
 } from "lucide-react";
 import {
   cn,
@@ -60,13 +59,13 @@ type TabType =
   | "relief-camps"
   | "analytics";
 
-export default function DistrictCollectorDashboard() {
+export default function NDRFAdminDashboard() {
   const [activeTab, setActiveTab] = useState<TabType>("dashboard");
-  const [showContactModal, setShowContactModal] = useState(false);
 
   // Mock data
-  const districtData = {
-    name: "Pune District",
+  const ndrfData = {
+    name: "NDRF Command Center",
+    region: "National Operations",
     activeIncidents: 12,
     teamsDeployed: 8,
     volunteersActive: 45,
@@ -86,7 +85,7 @@ export default function DistrictCollectorDashboard() {
     },
     {
       id: "tasks" as TabType,
-      label: "Task Status",
+      label: "Task Allocation",
       icon: ClipboardList,
     },
     {
@@ -115,29 +114,22 @@ export default function DistrictCollectorDashboard() {
   return (
     <div className="min-h-screen bg-gray-50">
       {/* Header */}
-      <header className="bg-purple-600 text-white shadow-lg">
+      <header className="bg-blue-600 text-white shadow-lg">
         <div className="max-w-7xl mx-auto px-4 py-4">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-3">
-              <Building2 className="w-8 h-8" />
+              <Shield className="w-8 h-8" />
               <div>
                 <h1 className="text-2xl font-bold">
-                  District Collector Portal
+                  NDRF Admin - Disaster Response Command Center
                 </h1>
-                <p className="text-purple-200 text-sm">{districtData.name} - View Only</p>
+                <p className="text-blue-200 text-sm">{ndrfData.region}</p>
               </div>
             </div>
             <div className="flex items-center gap-4">
-              <button
-                onClick={() => setShowContactModal(true)}
-                className="px-4 py-2 bg-green-500 text-white rounded-lg hover:bg-green-600 transition text-sm font-semibold flex items-center gap-2 animate-pulse"
-              >
-                <PhoneCall className="w-4 h-4" />
-                Contact NDRF Admin
-              </button>
               <Link
                 href="/portal"
-                className="px-4 py-2 bg-purple-700 rounded-lg hover:bg-purple-800 transition text-sm"
+                className="px-4 py-2 bg-blue-700 rounded-lg hover:bg-blue-800 transition text-sm"
               >
                 Switch Portal
               </Link>
@@ -147,78 +139,14 @@ export default function DistrictCollectorDashboard() {
       </header>
 
       {/* Alert Banner */}
-      <div className="bg-amber-50 border-l-4 border-amber-500 p-4">
+      <div className="bg-blue-50 border-l-4 border-blue-600 p-4">
         <div className="max-w-7xl mx-auto flex items-center gap-3">
-          <Eye className="w-5 h-5 text-amber-600" />
-          <p className="text-amber-900 text-sm">
-            <strong>View-Only Access:</strong> You can monitor all disaster operations. For actions, commands, or team dispatch, please contact NDRF Admin.
+          <ShieldCheck className="w-5 h-5 text-blue-600" />
+          <p className="text-blue-900 text-sm">
+            <strong>NDRF Command Center:</strong> Full control and coordination of all disaster response operations across India
           </p>
         </div>
       </div>
-
-      {/* Contact Modal */}
-      {showContactModal && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-xl shadow-2xl max-w-md w-full p-6">
-            <div className="flex items-center justify-between mb-4">
-              <div className="flex items-center gap-3">
-                <div className="w-12 h-12 bg-blue-100 rounded-full flex items-center justify-center">
-                  <Shield className="w-6 h-6 text-blue-600" />
-                </div>
-                <div>
-                  <h2 className="text-xl font-bold text-gray-900">Contact NDRF Admin</h2>
-                  <p className="text-sm text-gray-600">Emergency Coordination</p>
-                </div>
-              </div>
-              <button
-                onClick={() => setShowContactModal(false)}
-                className="text-gray-400 hover:text-gray-600"
-              >
-                <XCircle className="w-6 h-6" />
-              </button>
-            </div>
-            
-            <div className="space-y-4">
-              <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
-                <div className="flex items-center gap-2 mb-2">
-                  <Phone className="w-4 h-4 text-blue-600" />
-                  <span className="text-sm font-semibold text-blue-900">24/7 Hotline</span>
-                </div>
-                <a href="tel:1800-xxx-xxxx" className="text-lg font-bold text-blue-600">
-                  1800-11-3526 (NDRF)
-                </a>
-              </div>
-
-              <div className="bg-green-50 border border-green-200 rounded-lg p-4">
-                <div className="flex items-center gap-2 mb-2">
-                  <MessageSquare className="w-4 h-4 text-green-600" />
-                  <span className="text-sm font-semibold text-green-900">WhatsApp Command</span>
-                </div>
-                <a href="https://wa.me/91xxxxxxxxxx" className="text-lg font-bold text-green-600">
-                  +91 98765-43210
-                </a>
-              </div>
-
-              <div className="bg-purple-50 border border-purple-200 rounded-lg p-4">
-                <div className="flex items-center gap-2 mb-2">
-                  <Shield className="w-4 h-4 text-purple-600" />
-                  <span className="text-sm font-semibold text-purple-900">NDRF Portal Access</span>
-                </div>
-                <Link 
-                  href="/ndrf-admin"
-                  className="text-sm font-medium text-purple-600 hover:text-purple-700 underline"
-                >
-                  Request NDRF Admin Access →
-                </Link>
-              </div>
-
-              <p className="text-xs text-gray-500 text-center">
-                For immediate emergencies, call the 24/7 hotline. For coordination requests, use WhatsApp.
-              </p>
-            </div>
-          </div>
-        </div>
-      )}
 
       <div className="max-w-7xl mx-auto px-4 py-6">
         {/* Quick Stats */}
@@ -229,10 +157,10 @@ export default function DistrictCollectorDashboard() {
               <AlertTriangle className="w-5 h-5 text-red-600" />
             </div>
             <div className="text-3xl font-bold text-gray-900">
-              {districtData.activeIncidents}
+              {ndrfData.activeIncidents}
             </div>
             <div className="text-xs text-gray-500 mt-1">
-              In {districtData.name}
+              Nationwide
             </div>
           </div>
 
@@ -242,7 +170,7 @@ export default function DistrictCollectorDashboard() {
               <Users className="w-5 h-5 text-blue-600" />
             </div>
             <div className="text-3xl font-bold text-gray-900">
-              {districtData.teamsDeployed}
+              {ndrfData.teamsDeployed}
             </div>
             <div className="text-xs text-gray-500 mt-1">NDRF + SDRF</div>
           </div>
@@ -253,7 +181,7 @@ export default function DistrictCollectorDashboard() {
               <MapPin className="w-5 h-5 text-green-600" />
             </div>
             <div className="text-3xl font-bold text-gray-900">
-              {districtData.volunteersActive}
+              {ndrfData.volunteersActive}
             </div>
             <div className="text-xs text-gray-500 mt-1">On ground now</div>
           </div>
@@ -264,7 +192,7 @@ export default function DistrictCollectorDashboard() {
               <Radio className="w-5 h-5 text-orange-600" />
             </div>
             <div className="text-3xl font-bold text-gray-900">
-              {districtData.avgResponseTime}
+              {ndrfData.avgResponseTime}
             </div>
             <div className="text-xs text-gray-500 mt-1">Last 24 hours</div>
           </div>
@@ -282,8 +210,8 @@ export default function DistrictCollectorDashboard() {
                   className={cn(
                     "flex items-center gap-2 px-6 py-4 font-medium text-sm border-b-2 transition-colors whitespace-nowrap",
                     activeTab === tab.id
-                      ? "border-purple-600 text-purple-600 bg-purple-50"
-                      : "border-transparent text-gray-600 hover:text-purple-600 hover:bg-gray-50"
+                      ? "border-blue-600 text-blue-600 bg-blue-50"
+                      : "border-transparent text-gray-600 hover:text-blue-600 hover:bg-gray-50"
                   )}
                 >
                   <Icon className="w-4 h-4" />
@@ -634,8 +562,8 @@ function PredictionTab() {
             className={cn(
               "px-4 py-2 rounded-lg text-sm font-medium border transition-colors",
               activeModel === m.id
-                ? "bg-purple-600 text-white border-purple-600"
-                : "bg-white text-gray-700 border-gray-300 hover:border-purple-300"
+                ? "bg-blue-600 text-white border-blue-600"
+                : "bg-white text-gray-700 border-gray-300 hover:border-blue-300"
             )}
           >
             {m.label}
@@ -740,11 +668,10 @@ function TasksTab() {
       name: "Alpha Force — Odisha NDRF",
       state: "Odisha",
       district: "Cuttack",
-      status: "DEPLOYED",
+      status: "AVAILABLE",
       memberCount: 25,
       expertise: ["flood", "cyclone", "landslide"],
       distanceKm: 85,
-      assignedTo: "Puri Cyclone Response",
     },
     {
       id: "team-bravo",
@@ -755,7 +682,6 @@ function TasksTab() {
       memberCount: 20,
       expertise: ["earthquake", "landslide", "fire"],
       distanceKm: 320,
-      assignedTo: null,
     },
   ];
 
@@ -765,20 +691,21 @@ function TasksTab() {
     <div className="space-y-6">
       <div>
         <h2 className="text-2xl font-bold text-gray-900">
-          <Eye className="w-6 h-6 inline mr-2 text-purple-600" />
-          Task Status (View Only)
+          <Brain className="w-6 h-6 inline mr-2 text-blue-600" />
+          Intelligent Task Allocation
         </h2>
         <p className="text-gray-600 text-sm mt-1">
-          Monitor team deployments • Contact NDRF Admin for task allocation
+          AI-powered team matching → Full dispatch control
         </p>
       </div>
 
-      <div className="bg-amber-50 border border-amber-200 rounded-lg p-4">
+      <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
         <div className="flex items-start gap-3">
-          <Info className="w-5 h-5 text-amber-600 flex-shrink-0 mt-0.5" />
-          <div className="text-sm text-amber-900">
-            <strong>View-Only Mode:</strong> You can monitor team assignments and status.
-            To dispatch teams or modify allocations, please contact NDRF Admin.
+          <Info className="w-5 h-5 text-blue-600 flex-shrink-0 mt-0.5" />
+          <div className="text-sm text-blue-900">
+            <strong>NDRF Control:</strong> The AI engine scores each available
+            rescue team based on expertise match, proficiency score, and
+            proximity to the disaster site. You have full authority to dispatch teams.
           </div>
         </div>
       </div>
@@ -787,7 +714,7 @@ function TasksTab() {
         {/* Disaster selector */}
         <div>
           <h3 className="font-semibold text-gray-900 mb-3">
-            Active Disasters
+            Select Disaster
           </h3>
           <div className="space-y-3">
             {disasters.map((d) => (
@@ -797,8 +724,8 @@ function TasksTab() {
                 className={cn(
                   "w-full p-4 rounded-lg border text-left transition-all",
                   selectedDisaster.id === d.id
-                    ? "bg-purple-50 border-purple-300"
-                    : "bg-white border-gray-200 hover:border-purple-200"
+                    ? "bg-blue-50 border-blue-300"
+                    : "bg-white border-gray-200 hover:border-blue-200"
                 )}
               >
                 <div className="flex items-start gap-3">
@@ -831,16 +758,16 @@ function TasksTab() {
           </div>
         </div>
 
-        {/* Team status */}
+        {/* Team recommendations */}
         <div className="lg:col-span-2">
           <h3 className="font-semibold text-gray-900 mb-3">
-            Team Status
+            Available Teams
           </h3>
           <div className="space-y-4">
             {teams.map((team, idx) => (
               <div
                 key={team.id}
-                className="bg-gray-50 border border-gray-200 rounded-lg p-5"
+                className="bg-gradient-to-r from-blue-50 to-white border border-blue-200 rounded-lg p-5"
               >
                 <div className="flex items-start justify-between mb-3">
                   <div>
@@ -850,40 +777,44 @@ function TasksTab() {
                       {team.district}, {team.state}
                     </div>
                   </div>
-                  <span
-                    className={cn(
-                      "text-xs px-2 py-1 rounded border font-medium",
-                      team.status === "DEPLOYED"
-                        ? "text-blue-700 bg-blue-50 border-blue-200"
-                        : "text-green-700 bg-green-50 border-green-200"
-                    )}
-                  >
-                    {team.status}
-                  </span>
+                  {idx === 0 && (
+                    <div className="flex items-center gap-1 bg-blue-100 border border-blue-300 rounded-full px-3 py-1">
+                      <Star className="w-3 h-3 text-blue-600" />
+                      <span className="text-xs text-blue-700 font-bold">
+                        Best Match
+                      </span>
+                    </div>
+                  )}
                 </div>
                 <div className="flex flex-wrap gap-2 mb-3">
-                  <div className="text-xs bg-gray-100 border border-gray-300 text-gray-700 rounded px-2 py-1">
+                  <div className="text-xs bg-green-50 border border-green-200 text-green-700 rounded px-2 py-1">
+                    ✓ {team.status}
+                  </div>
+                  <div className="text-xs bg-blue-50 border border-blue-200 text-blue-700 rounded px-2 py-1">
                     👥 {team.memberCount} members
                   </div>
-                  <div className="text-xs bg-gray-100 border border-gray-300 text-gray-700 rounded px-2 py-1">
+                  <div className="text-xs bg-amber-50 border border-amber-200 text-amber-700 rounded px-2 py-1">
                     📍 ~{team.distanceKm} km away
                   </div>
                 </div>
-                {team.assignedTo && (
-                  <div className="mb-3 p-2 bg-blue-50 border border-blue-200 rounded text-xs text-blue-900">
-                    <strong>Assigned to:</strong> {team.assignedTo}
-                  </div>
-                )}
                 <div className="flex flex-wrap gap-1.5">
                   {team.expertise.map((e) => (
                     <span
                       key={e}
-                      className="text-xs px-2 py-1 rounded border capitalize text-gray-600 bg-gray-50 border-gray-200"
+                      className={cn(
+                        "text-xs px-2 py-1 rounded border capitalize",
+                        team.expertise.includes(selectedDisaster.type)
+                          ? "text-green-700 bg-green-50 border-green-200"
+                          : "text-gray-600 bg-gray-50 border-gray-200"
+                      )}
                     >
                       {getDisasterIcon(e)} {e}
                     </span>
                   ))}
                 </div>
+                <button className="mt-4 w-full bg-blue-600 text-white py-2 rounded-lg hover:bg-blue-700 transition font-medium">
+                  Dispatch Team
+                </button>
               </div>
             ))}
           </div>
@@ -896,6 +827,58 @@ function TasksTab() {
 // SOS Tab Component
 function SOSTab() {
   const [filter, setFilter] = useState("ALL");
+  const [sendingSOSId, setSendingSOSId] = useState<string | null>(null);
+  const [showSOSModal, setShowSOSModal] = useState(false);
+  const [selectedSOS, setSelectedSOS] = useState<any>(null);
+  const [sosResponse, setSOSResponse] = useState<any>(null);
+
+  // Function to send SOS to all volunteers
+  const handleSendSOS = async (sos: any) => {
+    setSelectedSOS(sos);
+    setShowSOSModal(true);
+  };
+
+  const confirmSendSOS = async () => {
+    if (!selectedSOS) return;
+    
+    setSendingSOSId(selectedSOS.id);
+    setSOSResponse(null);
+    
+    try {
+      const response = await fetch("/api/sos-alert", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          incidentId: selectedSOS.id,
+          disasterType: selectedSOS.disasterType,
+          title: selectedSOS.title,
+          description: selectedSOS.description,
+          severity: selectedSOS.severity,
+          location: { lat: 20.2961, lng: 85.8245 }, // Default coordinates from address
+          address: selectedSOS.address,
+          reporterName: selectedSOS.reporter,
+          reporterPhone: selectedSOS.phone,
+          sentBy: "NDRF_ADMIN"
+        })
+      });
+      
+      const data = await response.json();
+      
+      if (data.success) {
+        setSOSResponse(data.data);
+        // Keep modal open to show success message
+      } else {
+        alert("Failed to send SOS: " + data.error);
+        setShowSOSModal(false);
+      }
+    } catch (error) {
+      console.error("Error sending SOS:", error);
+      alert("Failed to send SOS alert. Please try again.");
+      setShowSOSModal(false);
+    } finally {
+      setSendingSOSId(null);
+    }
+  };
 
   const sosList = [
     {
@@ -906,12 +889,11 @@ function SOSTab() {
       disasterType: "flood",
       severity: "CRITICAL",
       address: "Sector 5, Near Water Tank, Bhubaneswar",
-      status: "DISPATCHED",
+      status: "WARD_NOTIFIED",
       reporter: "Priya Patel",
       phone: "+91-9812345678",
       injuredCount: 3,
       affectedFamilies: 12,
-      assignedTeam: "NDRF Team Alpha",
       createdAt: new Date(Date.now() - 8 * 60000).toISOString(),
     },
     {
@@ -921,12 +903,11 @@ function SOSTab() {
       disasterType: "earthquake",
       severity: "HIGH",
       address: "Main Bazaar Road, Old Town, Bhubaneswar",
-      status: "VERIFIED",
+      status: "UNVERIFIED",
       reporter: "Arun Singh",
       phone: "+91-9812345679",
       injuredCount: 8,
       affectedFamilies: 4,
-      assignedTeam: "Awaiting dispatch",
       createdAt: new Date(Date.now() - 45 * 60000).toISOString(),
     },
     {
@@ -936,12 +917,11 @@ function SOSTab() {
       disasterType: "fire",
       severity: "HIGH",
       address: "Slum Area, Railway Station Road, Bhubaneswar",
-      status: "RESOLVED",
+      status: "VERIFIED",
       reporter: "Meena Devi",
       phone: "+91-9812345680",
       injuredCount: 5,
       affectedFamilies: 30,
-      assignedTeam: "Fire Services Team",
       createdAt: new Date(Date.now() - 2 * 3600000).toISOString(),
     },
   ];
@@ -962,10 +942,10 @@ function SOSTab() {
       <div>
         <h2 className="text-2xl font-bold text-gray-900">
           <Bell className="w-6 h-6 inline mr-2 text-amber-600" />
-          SOS Alerts (View Only)
+          SOS Alerts &amp; Management
         </h2>
         <p className="text-gray-600 text-sm mt-1">
-          Monitor emergency reports • NDRF Admin manages verification and dispatch
+          Full control over emergency reports • Verify and dispatch teams
         </p>
       </div>
 
@@ -1013,8 +993,8 @@ function SOSTab() {
             className={cn(
               "px-3 py-1.5 rounded-lg text-sm font-medium border transition-colors",
               filter === f
-                ? "bg-purple-600 text-white border-purple-600"
-                : "bg-white text-gray-700 border-gray-300 hover:border-purple-300"
+                ? "bg-blue-600 text-white border-blue-600"
+                : "bg-white text-gray-700 border-gray-300 hover:border-blue-300"
             )}
           >
             {f} {f !== "ALL" && `(${sosList.filter((s) => s.status === f).length})`}
@@ -1088,21 +1068,212 @@ function SOSTab() {
                     </div>
                   </div>
                 </div>
-                
-                {sos.assignedTeam && (
-                  <div className="p-2 bg-blue-50 border border-blue-200 rounded text-sm text-blue-900 mb-2">
-                    <strong>Team Assigned:</strong> {sos.assignedTeam}
-                  </div>
-                )}
-
-                <div className="text-xs text-gray-500 italic">
-                  View-only mode • Contact NDRF Admin to modify SOS status
+                <div className="flex gap-2 flex-wrap">
+                  <button className="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition text-sm font-medium">
+                    ✅ Verify
+                  </button>
+                  <button className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition text-sm font-medium">
+                    🚁 Dispatch Team
+                  </button>
+                  <button 
+                    onClick={() => handleSendSOS(sos)}
+                    disabled={sendingSOSId === sos.id}
+                    className="px-4 py-2 bg-orange-600 text-white rounded-lg hover:bg-orange-700 transition text-sm font-medium disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
+                  >
+                    {sendingSOSId === sos.id ? (
+                      <>⏳ Sending...</>
+                    ) : (
+                      <>📢 Alert Volunteers</>
+                    )}
+                  </button>
+                  <button className="px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition text-sm font-medium">
+                    ⛔ Mark as False
+                  </button>
                 </div>
               </div>
             </div>
           </div>
         ))}
       </div>
+
+      {/* SOS Alert Confirmation Modal */}
+      {showSOSModal && selectedSOS && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-xl shadow-2xl max-w-2xl w-full max-h-[90vh] overflow-y-auto">
+            <div className="bg-gradient-to-r from-orange-600 to-red-600 text-white p-6 rounded-t-xl">
+              <h3 className="text-2xl font-bold flex items-center gap-2">
+                <Radio className="w-6 h-6 animate-pulse" />
+                Alert All Volunteers
+              </h3>
+              <p className="text-orange-100 mt-1">Send SOS broadcast to available volunteers</p>
+            </div>
+            
+            {!sosResponse ? (
+              <div className="p-6 space-y-4">
+                <div className="bg-amber-50 border border-amber-200 rounded-lg p-4">
+                  <p className="text-sm text-amber-800 flex items-start gap-2">
+                    <AlertTriangle className="w-5 h-5 flex-shrink-0 mt-0.5" />
+                    <span>
+                      This will send an <strong>emergency SOS alert</strong> to all verified and available volunteers. 
+                      The alert will include disaster details, victim location, and required skills.
+                    </span>
+                  </p>
+                </div>
+
+                <div className="space-y-3">
+                  <h4 className="font-semibold text-gray-900 flex items-center gap-2">
+                    <Info className="w-4 h-4" />
+                    Incident Details
+                  </h4>
+                  
+                  <div className="grid grid-cols-2 gap-3">
+                    <div className="bg-gray-50 p-3 rounded-lg">
+                      <div className="text-xs text-gray-500 mb-1">Disaster Type</div>
+                      <div className="font-medium text-gray-900 flex items-center gap-1">
+                        {getDisasterIcon(selectedSOS.disasterType)} {selectedSOS.disasterType}
+                      </div>
+                    </div>
+                    <div className="bg-gray-50 p-3 rounded-lg">
+                      <div className="text-xs text-gray-500 mb-1">Severity</div>
+                      <div className={cn("font-medium inline-block px-2 py-1 rounded text-sm", getSeverityColor(selectedSOS.severity))}>
+                        {selectedSOS.severity}
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="bg-gray-50 p-3 rounded-lg">
+                    <div className="text-xs text-gray-500 mb-1">Incident</div>
+                    <div className="font-medium text-gray-900">{selectedSOS.title}</div>
+                    <div className="text-sm text-gray-600 mt-1">{selectedSOS.description}</div>
+                  </div>
+
+                  <div className="bg-gray-50 p-3 rounded-lg">
+                    <div className="text-xs text-gray-500 mb-1">
+                      <MapPin className="w-3 h-3 inline" /> Location
+                    </div>
+                    <div className="font-medium text-gray-900">{selectedSOS.address}</div>
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-3">
+                    <div className="bg-gray-50 p-3 rounded-lg">
+                      <div className="text-xs text-gray-500 mb-1">
+                        <User className="w-3 h-3 inline" /> Reporter
+                      </div>
+                      <div className="font-medium text-gray-900">{selectedSOS.reporter}</div>
+                    </div>
+                    <div className="bg-gray-50 p-3 rounded-lg">
+                      <div className="text-xs text-gray-500 mb-1">
+                        <Phone className="w-3 h-3 inline" /> Contact
+                      </div>
+                      <div className="font-medium text-gray-900">{selectedSOS.phone}</div>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
+                  <h5 className="font-semibold text-blue-900 mb-2">📋 Volunteers Will Receive:</h5>
+                  <ul className="text-sm text-blue-800 space-y-1">
+                    <li>✓ Disaster type and severity level</li>
+                    <li>✓ Exact location with GPS coordinates</li>
+                    <li>✓ Reporter contact details</li>
+                    <li>✓ Required skills (auto-matched based on disaster type)</li>
+                    <li>✓ Immediate action instructions</li>
+                  </ul>
+                </div>
+
+                <div className="flex justify-end gap-3 pt-4 border-t">
+                  <button
+                    onClick={() => {
+                      setShowSOSModal(false);
+                      setSelectedSOS(null);
+                    }}
+                    className="px-6 py-2 border border-gray-300 rounded-lg hover:bg-gray-50 transition font-medium"
+                    disabled={sendingSOSId !== null}
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    onClick={confirmSendSOS}
+                    disabled={sendingSOSId !== null}
+                    className="px-6 py-2 bg-orange-600 text-white rounded-lg hover:bg-orange-700 transition font-medium disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
+                  >
+                    {sendingSOSId ? (
+                      <>
+                        <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                        Sending SOS...
+                      </>
+                    ) : (
+                      <>
+                        <Radio className="w-4 h-4" />
+                        Confirm & Send SOS
+                      </>
+                    )}
+                  </button>
+                </div>
+              </div>
+            ) : (
+              <div className="p-6 space-y-4">
+                <div className="text-center py-6">
+                  <div className="w-16 h-16 bg-green-100 rounded-full flex items-center justify-center mx-auto mb-4">
+                    <CheckCircle2 className="w-10 h-10 text-green-600" />
+                  </div>
+                  <h4 className="text-2xl font-bold text-gray-900 mb-2">SOS Alert Sent Successfully!</h4>
+                  <p className="text-gray-600">Volunteers have been notified and are en route.</p>
+                </div>
+
+                <div className="bg-green-50 border border-green-200 rounded-lg p-4">
+                  <h5 className="font-semibold text-green-900 mb-3 flex items-center gap-2">
+                    <Users className="w-5 h-5" />
+                    Alert Summary
+                  </h5>
+                  <div className="grid grid-cols-2 gap-4">
+                    <div>
+                      <div className="text-sm text-green-600">Volunteers Notified</div>
+                      <div className="text-2xl font-bold text-green-900">{sosResponse.totalVolunteersNotified}</div>
+                    </div>
+                    <div>
+                      <div className="text-sm text-green-600">Required Skills</div>
+                      <div className="text-sm font-medium text-green-900 mt-1">
+                        {sosResponse.requiredSkills?.join(", ") || "General assistance"}
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                {sosResponse.notifications && sosResponse.notifications.length > 0 && (
+                  <div className="bg-gray-50 border border-gray-200 rounded-lg p-4 max-h-60 overflow-y-auto">
+                    <h5 className="font-semibold text-gray-900 mb-3">Sample Notifications (First 5)</h5>
+                    <div className="space-y-2">
+                      {sosResponse.notifications.map((notif: any, idx: number) => (
+                        <div key={idx} className="bg-white p-3 rounded border border-gray-200 text-sm">
+                          <div className="font-medium text-gray-900">{notif.volunteerName}</div>
+                          <div className="text-xs text-gray-500">{notif.volunteerPhone}</div>
+                          <div className="text-xs text-blue-600 mt-1">
+                            Skills: {notif.volunteerSkills?.join(", ") || "None listed"}
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                <div className="flex justify-end pt-4 border-t">
+                  <button
+                    onClick={() => {
+                      setShowSOSModal(false);
+                      setSelectedSOS(null);
+                      setSOSResponse(null);
+                    }}
+                    className="px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition font-medium"
+                  >
+                    Close
+                  </button>
+                </div>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
     </div>
   );
 }
@@ -1176,7 +1347,7 @@ function HospitalsTab() {
         <div className="relative flex-1 max-w-md">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
           <input
-            className="w-full pl-9 pr-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500"
+            className="w-full pl-9 pr-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
             placeholder="Search hospitals..."
             value={searchTerm}
             onChange={(e) => setSearchTerm(e.target.value)}
@@ -1189,8 +1360,8 @@ function HospitalsTab() {
             className={cn(
               "px-4 py-2 rounded-lg text-sm font-medium border transition-colors",
               filterType === f
-                ? "bg-purple-600 text-white border-purple-600"
-                : "bg-white text-gray-700 border-gray-300 hover:border-purple-300"
+                ? "bg-blue-600 text-white border-blue-600"
+                : "bg-white text-gray-700 border-gray-300 hover:border-blue-300"
             )}
           >
             {f}
@@ -1366,12 +1537,16 @@ function ReliefCampsTab() {
       <div className="flex items-center justify-between">
         <div>
           <h2 className="text-2xl font-bold text-gray-900">
-            Relief Camp Status (View Only)
+            Relief Camp Coordination
           </h2>
           <p className="text-gray-600 text-sm mt-1">
-            Monitor camps, track capacity, view supplies • Contact NDRF Admin for modifications
+            Manage camps, track capacity, monitor supplies, coordinate transfers
           </p>
         </div>
+        <button className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition flex items-center gap-2">
+          <Plus className="w-4 h-4" />
+          Add Camp
+        </button>
       </div>
 
       {/* Summary */}
@@ -1521,7 +1696,7 @@ function AnalyticsTab() {
     <div className="space-y-6">
       <div>
         <h2 className="text-2xl font-bold text-gray-900">
-          <BarChart3 className="w-6 h-6 inline mr-2 text-purple-600" />
+          <BarChart3 className="w-6 h-6 inline mr-2 text-blue-600" />
           Analytics &amp; Insights
         </h2>
         <p className="text-gray-600 text-sm mt-1">
@@ -1629,25 +1804,24 @@ function AnalyticsTab() {
       {/* Export section */}
       <div className="bg-white p-6 rounded-lg border border-gray-200">
         <div className="flex items-center gap-3 mb-4">
-          <FileDown className="w-5 h-5 text-purple-600" />
+          <FileDown className="w-5 h-5 text-blue-600" />
           <h3 className="text-lg font-bold text-gray-900">
             Export &amp; Reports
           </h3>
         </div>
         <p className="text-gray-600 mb-4 text-sm">
-          Generate comprehensive reports for district administration and state
-          authorities.
+          Generate comprehensive reports for NDMA, state authorities and district administration.
         </p>
         <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-          <button className="flex items-center gap-2 px-4 py-3 bg-purple-50 text-purple-700 rounded-lg hover:bg-purple-100 transition border border-purple-200">
+          <button className="flex items-center gap-2 px-4 py-3 bg-blue-50 text-blue-700 rounded-lg hover:bg-blue-100 transition border border-blue-200">
             <FileDown className="w-4 h-4" />
             <span className="font-medium text-sm">Daily Situation Report</span>
           </button>
-          <button className="flex items-center gap-2 px-4 py-3 bg-purple-50 text-purple-700 rounded-lg hover:bg-purple-100 transition border border-purple-200">
+          <button className="flex items-center gap-2 px-4 py-3 bg-blue-50 text-blue-700 rounded-lg hover:bg-blue-100 transition border border-blue-200">
             <FileDown className="w-4 h-4" />
             <span className="font-medium text-sm">Resource Utilization</span>
           </button>
-          <button className="flex items-center gap-2 px-4 py-3 bg-purple-50 text-purple-700 rounded-lg hover:bg-purple-100 transition border border-purple-200">
+          <button className="flex items-center gap-2 px-4 py-3 bg-blue-50 text-blue-700 rounded-lg hover:bg-blue-100 transition border border-blue-200">
             <FileDown className="w-4 h-4" />
             <span className="font-medium text-sm">
               Response Time Analysis
