@@ -156,6 +156,11 @@ async function main() {
     
     const primaryHazard = baseRisk > 60 ? 'flood' : baseRisk > 40 ? 'drought' : 'heatwave';
     
+    // Calculate population density safely (handle null values)
+    const populationDensity = (district.population && district.areaSqKm) 
+      ? district.population / district.areaSqKm 
+      : 500; // Default density
+    
     const riskScore = await prismaClientForSeed.riskScore.create({
       data: {
         regionId: district.id,
@@ -165,7 +170,7 @@ async function main() {
         factors: JSON.stringify({
           heavy_rainfall: primaryHazard === 'flood' ? 0.8 : 0.2,
           saturated_soil: primaryHazard === 'flood' ? 0.7 : 0.3,
-          population_density: district.population / district.areaSqKm > 1000 ? 0.9 : 0.5,
+          population_density: populationDensity > 1000 ? 0.9 : 0.5,
         }),
         modelVersion: 'v1.0-seed',
         confidence: 0.75 + Math.random() * 0.2,
