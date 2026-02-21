@@ -153,11 +153,42 @@ model WeatherData {
 }
 
 // ==================== MULTI-USER SYSTEM ====================
-// Note: SQLite doesn't support enums, using String instead
-// Valid values for role: NDRF_ADMIN, COLLECTOR, CITIZEN, VOLUNTEER, NGO
-// Valid values for volunteerStatus: PENDING, VERIFIED, ACTIVE, ON_DUTY, INACTIVE, SUSPENDED
-// Valid values for incidentStatus: REPORTED, VERIFIED, ASSIGNED, IN_PROGRESS, RESOLVED, CLOSED
-// Valid values for taskStatus: PENDING, ASSIGNED, ACCEPTED, IN_PROGRESS, COMPLETED, VERIFIED
+
+enum UserRole {
+  NDRF_ADMIN      // Full access to coordination dashboard
+  COLLECTOR       // District Collector view-only + direct NDRF communication
+  CITIZEN         // SOS and incident reporting
+  VOLUNTEER       // Task assignment and check-in
+  NGO             // Resource contribution and tracking
+  EVACUEE         // People in relief camps
+}
+
+enum VolunteerStatus {
+  PENDING         // Registration submitted
+  VERIFIED        // Ward office verified
+  ACTIVE          // Available for deployment
+  ON_DUTY         // Currently deployed
+  INACTIVE        // Not available
+  SUSPENDED       // Suspended by authority
+}
+
+enum IncidentStatus {
+  REPORTED        // Just reported by citizen
+  VERIFIED        // Verified by authority
+  ASSIGNED        // Team assigned
+  IN_PROGRESS     // Team on site
+  RESOLVED        // Incident resolved
+  CLOSED          // Closed by authority
+}
+
+enum TaskStatus {
+  PENDING         // Task created
+  ASSIGNED        // Assigned to volunteer
+  ACCEPTED        // Volunteer accepted
+  IN_PROGRESS     // Volunteer checked in
+  COMPLETED       // Task completed
+  VERIFIED        // Verified by authority
+}
 
 // User accounts with role-based access
 model User {
@@ -171,6 +202,10 @@ model User {
   
   isActive          Boolean  @default(true)
   lastLogin         DateTime?
+
+  // OTP fields
+  otp              String?
+  otpExpires       DateTime?
   
   // Relationships
   profile           UserProfile?
@@ -201,6 +236,14 @@ model UserProfile {
   
   address         String?
   emergencyContact String?
+  
+  // Evacuee-specific fields
+  reliefCampId    String?  // Relief camp location ID
+  evacuatedFrom   String?  // Original address before evacuation
+  evacuationDate  DateTime?
+  familyMembers   Int?     // Number of family members
+  medicalNeeds    String?  // Medical conditions or requirements
+  aadhaarNumber   String?  // For identity verification
   
   // Permissions (stored as JSON string)
   permissions     String?  // ["view_incidents", "assign_teams", "export_data"]
