@@ -1,12 +1,17 @@
 # Suraksha Sathi NDRF Backend Dependencies
+# Combined requirements from pavan and anushka branches
 
 # Core Framework
 fastapi==0.104.1
 uvicorn[standard]==0.24.0
 
 # Data Processing
-numpy==1.26.2
-pandas==2.1.4
+numpy>=2.0.0
+pandas>=2.2.0
+
+# Machine Learning (from anushka branch)
+scikit-learn>=1.4.0
+joblib==1.3.2
 
 # HTTP & APIs
 requests==2.31.0
@@ -18,8 +23,9 @@ python-dotenv==1.0.0
 # Validation
 pydantic==2.5.0
 
-# Background Scheduling
+# Background Scheduling (both branches need scheduling)
 apscheduler==3.10.4
+schedule==1.2.0
 
 # CORS
 python-multipart==0.0.6
