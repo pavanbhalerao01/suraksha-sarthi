@@ -951,6 +951,7 @@ function SOSTab() {
   const [showForwardModal, setShowForwardModal] = useState(false);
   const [selectedTeam, setSelectedTeam] = useState<string | null>(null);
   const [forwardingTeam, setForwardingTeam] = useState(false);
+  const [dismissedSOSIds, setDismissedSOSIds] = useState<Set<string>>(new Set());
 
   // Function to send alert to rescue teams
   const handleSendRescueAlert = async (sos: any) => {
@@ -1079,6 +1080,13 @@ function SOSTab() {
     }
   };
 
+  // Function to mark SOS as false alert
+  const handleMarkAsFalse = (sosId: string) => {
+    if (confirm("Are you sure you want to mark this SOS as a false alert? This action will remove it from the list.")) {
+      setDismissedSOSIds(prev => new Set(prev).add(sosId));
+    }
+  };
+
   // Function to send SOS to all volunteers
   const handleSendSOS = async (sos: any) => {
     setSelectedSOS(sos);
@@ -1181,8 +1189,10 @@ function SOSTab() {
     "DISPATCHED",
     "RESOLVED",
   ];
-  const filtered =
-    filter === "ALL" ? sosList : sosList.filter((s) => s.status === filter);
+  
+  // Filter by status and remove dismissed SOSs
+  const filtered = (filter === "ALL" ? sosList : sosList.filter((s) => s.status === filter))
+    .filter((s) => !dismissedSOSIds.has(s.id));
 
   return (
     <div className="space-y-6">
@@ -1358,7 +1368,10 @@ function SOSTab() {
                       <>📢 Alert Volunteers</>
                     )}
                   </button>
-                  <button className="px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition text-sm font-medium">
+                  <button 
+                    onClick={() => handleMarkAsFalse(sos.id)}
+                    className="px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition text-sm font-medium"
+                  >
                     ⛔ Mark as False
                   </button>
                 </div>
@@ -1371,16 +1384,28 @@ function SOSTab() {
       {/* Forward SOS Modal */}
       {showForwardModal && selectedSOS && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-xl shadow-2xl max-w-2xl w-full">
-            <div className="bg-gradient-to-r from-green-600 to-emerald-600 text-white p-6 rounded-t-xl">
-              <h3 className="text-2xl font-bold flex items-center gap-2">
-                <Send className="w-6 h-6" />
-                Forward SOS to Response Team
-              </h3>
-              <p className="text-green-100 mt-1">Select the appropriate team to handle this emergency</p>
+          <div className="bg-white rounded-xl shadow-2xl max-w-2xl w-full max-h-[90vh] flex flex-col">
+            <div className="bg-gradient-to-r from-green-600 to-emerald-600 text-white p-6 rounded-t-xl flex items-center justify-between">
+              <div>
+                <h3 className="text-2xl font-bold flex items-center gap-2">
+                  <Send className="w-6 h-6" />
+                  Forward SOS to Response Team
+                </h3>
+                <p className="text-green-100 mt-1">Select the appropriate team to handle this emergency</p>
+              </div>
+              <button
+                onClick={() => {
+                  setShowForwardModal(false);
+                  setSelectedSOS(null);
+                  setSelectedTeam(null);
+                }}
+                className="text-white hover:bg-white/20 rounded-full p-2 transition"
+              >
+                <XCircle className="w-6 h-6" />
+              </button>
             </div>
             
-            <div className="p-6 space-y-4">
+            <div className="p-6 space-y-4 overflow-y-auto flex-1">
               {/* Incident Details */}
               <div className="bg-gray-50 border border-gray-200 rounded-lg p-4">
                 <h5 className="font-semibold text-gray-900 mb-2">📋 Incident Details</h5>
@@ -1431,38 +1456,38 @@ function SOSTab() {
                   </p>
                 </div>
               )}
+            </div>
 
-              {/* Actions */}
-              <div className="flex justify-end gap-3 pt-4 border-t">
-                <button
-                  onClick={() => {
-                    setShowForwardModal(false);
-                    setSelectedSOS(null);
-                    setSelectedTeam(null);
-                  }}
-                  className="px-6 py-2 border border-gray-300 rounded-lg hover:bg-gray-50 transition font-medium"
-                  disabled={forwardingTeam}
-                >
-                  Cancel
-                </button>
-                <button
-                  onClick={confirmForwardSOS}
-                  disabled={!selectedTeam || forwardingTeam}
-                  className="px-6 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition font-medium disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
-                >
-                  {forwardingTeam ? (
-                    <>
-                      <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
-                      Forwarding...
-                    </>
-                  ) : (
-                    <>
-                      <Send className="w-4 h-4" />
-                      Forward to Team
-                    </>
-                  )}
-                </button>
-              </div>
+            {/* Sticky Footer with Buttons */}
+            <div className="flex justify-end gap-3 p-6 border-t bg-gray-50 rounded-b-xl">
+              <button
+                onClick={() => {
+                  setShowForwardModal(false);
+                  setSelectedSOS(null);
+                  setSelectedTeam(null);
+                }}
+                className="px-6 py-2 border border-gray-300 rounded-lg hover:bg-gray-50 bg-white transition font-medium"
+                disabled={forwardingTeam}
+              >
+                Cancel
+              </button>
+              <button
+                onClick={confirmForwardSOS}
+                disabled={!selectedTeam || forwardingTeam}
+                className="px-6 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition font-medium disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
+              >
+                {forwardingTeam ? (
+                  <>
+                    <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                    Forwarding...
+                  </>
+                ) : (
+                  <>
+                    <Send className="w-4 h-4" />
+                    Forward to Team
+                  </>
+                )}
+              </button>
             </div>
           </div>
         </div>
