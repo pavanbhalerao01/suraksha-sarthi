@@ -152,7 +152,7 @@ export default function NGOPortal() {
               <CheckCircle className="w-5 h-5 text-green-600" />
             </div>
             <div className="text-lg font-bold text-green-600">Verified</div>
-            <div className="text-xs text-gray-500 mt-1">{ngoData.registrationNo}</div>
+            <div className="text-xs text-gray-700 mt-1">{ngoData.registrationNo}</div>
           </div>
         </div>
 
@@ -229,7 +229,7 @@ export default function NGOPortal() {
                           🎯 Allocated to: <strong>{resource.allocatedTo}</strong>
                         </p>
                       )}
-                      <div className="flex items-center gap-4 text-xs text-gray-500">
+                      <div className="flex items-center gap-4 text-xs text-gray-700">
                         <span className="flex items-center gap-1">
                           <Clock className="w-3 h-3" />
                           {resource.contributedDate}

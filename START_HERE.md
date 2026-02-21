@@ -494,7 +494,7 @@ export default function IncidentsPage() {
           <div className="text-center py-12">Loading incidents...</div>
         ) : incidents.length === 0 ? (
           <div className="bg-white rounded-lg shadow p-12 text-center">
-            <p className="text-gray-500">No incidents found</p>
+            <p className="text-gray-700">No incidents found</p>
           </div>
         ) : (
           incidents.map(incident => (
@@ -565,7 +565,7 @@ function IncidentCard({ incident }: { incident: Incident }) {
             <span className={`px-3 py-1 rounded-full text-xs font-medium ${statusColors[incident.status]}`}>
               {incident.status}
             </span>
-            <span className="text-xs text-gray-500 uppercase">{incident.type}</span>
+            <span className="text-xs text-gray-700 uppercase">{incident.type}</span>
           </div>
           <h3 className="text-lg font-bold text-gray-900 mb-1">
             {incident.description}
@@ -579,11 +579,11 @@ function IncidentCard({ incident }: { incident: Incident }) {
         </div>
         <div className="text-right">
           <div className="text-2xl font-bold text-gray-900">#{incident.priority}</div>
-          <div className="text-xs text-gray-500">Priority</div>
+          <div className="text-xs text-gray-700">Priority</div>
         </div>
       </div>
       <div className="flex items-center justify-between pt-4 border-t border-gray-100">
-        <span className="text-xs text-gray-500">
+        <span className="text-xs text-gray-700">
           Reported: {new Date(incident.reportedAt).toLocaleString()}
         </span>
         <button className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition">

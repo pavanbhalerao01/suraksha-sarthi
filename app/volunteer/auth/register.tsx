@@ -65,6 +65,7 @@ export default function VolunteerRegister() {
     const data = await res.json();
     setLoading(false);
     if (data.success) {
+      localStorage.setItem("phoneNumber", formattedPhone);
       window.location.href = "/volunteer";
     } else {
       setError(data.error || "Invalid OTP.");

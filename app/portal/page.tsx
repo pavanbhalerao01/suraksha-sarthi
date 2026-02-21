@@ -199,7 +199,7 @@ export default function PortalSelectionPage() {
 
                   {/* Features List */}
                   <div className="space-y-2 mb-6">
-                    <p className="text-xs font-semibold text-gray-500 uppercase">
+                    <p className="text-xs font-semibold text-gray-700 uppercase">
                       Key Features
                     </p>
                     {portal.features.map((feature, idx) => (

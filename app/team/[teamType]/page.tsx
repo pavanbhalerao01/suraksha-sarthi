@@ -211,7 +211,7 @@ export default function ActionTeamPage() {
                           {incident.distance}
                         </span>
                       </div>
-                      <div className="flex items-center gap-4 text-xs text-gray-500">
+                      <div className="flex items-center gap-4 text-xs text-gray-700">
                         <span>👥 {incident.peopleAffected} people affected</span>
                         <span>🕐 Assigned {incident.assignedTime}</span>
                       </div>

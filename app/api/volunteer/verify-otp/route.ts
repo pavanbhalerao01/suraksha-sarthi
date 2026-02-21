@@ -7,7 +7,7 @@ const prisma = new PrismaClient();
 const otpStorePath = path.join(process.cwd(), "otp-store.json");
 
 export async function POST(request: NextRequest) {
-  const { phoneNumber, otp, skills } = await request.json();
+  const { phoneNumber, otp, skills, name } = await request.json();
 
   // Verify OTP from file
   let store: { [key: string]: string } = {};
@@ -31,7 +31,7 @@ export async function POST(request: NextRequest) {
       data: {
         phone: phoneNumber,
         role: "VOLUNTEER",
-        name: phoneNumber,
+        name: name || phoneNumber,
         email: `${phoneNumber}@example.com`, // dummy email
         passwordHash: "otp-login", // dummy hash
       }

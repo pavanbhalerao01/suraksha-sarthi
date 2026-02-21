@@ -65,7 +65,7 @@ export default function DistrictCollectorDashboard() {
               <AlertTriangle className="w-5 h-5 text-red-600" />
             </div>
             <div className="text-3xl font-bold text-gray-900">{districtData.activeIncidents}</div>
-            <div className="text-xs text-gray-500 mt-1">In {districtData.name}</div>
+            <div className="text-xs text-gray-700 mt-1">In {districtData.name}</div>
           </div>
 
           <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-200">
@@ -74,7 +74,7 @@ export default function DistrictCollectorDashboard() {
               <Users className="w-5 h-5 text-blue-600" />
             </div>
             <div className="text-3xl font-bold text-gray-900">{districtData.teamsDeployed}</div>
-            <div className="text-xs text-gray-500 mt-1">NDRF + SDRF</div>
+            <div className="text-xs text-gray-700 mt-1">NDRF + SDRF</div>
           </div>
 
           <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-200">
@@ -83,7 +83,7 @@ export default function DistrictCollectorDashboard() {
               <MapPin className="w-5 h-5 text-green-600" />
             </div>
             <div className="text-3xl font-bold text-gray-900">{districtData.volunteersActive}</div>
-            <div className="text-xs text-gray-500 mt-1">On ground now</div>
+            <div className="text-xs text-gray-700 mt-1">On ground now</div>
           </div>
 
           <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-200">
@@ -92,7 +92,7 @@ export default function DistrictCollectorDashboard() {
               <Radio className="w-5 h-5 text-orange-600" />
             </div>
             <div className="text-3xl font-bold text-gray-900">{districtData.avgResponseTime}</div>
-            <div className="text-xs text-gray-500 mt-1">Last 24 hours</div>
+            <div className="text-xs text-gray-700 mt-1">Last 24 hours</div>
           </div>
         </div>
 
@@ -126,7 +126,7 @@ export default function DistrictCollectorDashboard() {
               </span>
             </div>
             <div className="bg-gray-100 rounded-lg h-96 flex items-center justify-center">
-              <div className="text-center text-gray-500">
+              <div className="text-center text-gray-700">
                 <MapPin className="w-12 h-12 mx-auto mb-2 text-gray-400" />
                 <p>Interactive map showing all incidents, teams, and volunteers</p>
                 <p className="text-sm mt-1">Will be integrated with Leaflet.js</p>

@@ -60,7 +60,8 @@ export default function VolunteerLogin() {
       const data = await res.json();
       setLoading(false);
       if (data.success) {
-        // Redirect to volunteer dashboard
+        // Store phone number for session persistence
+        localStorage.setItem("phoneNumber", formattedPhone);
         window.location.href = "/volunteer";
       } else {
         setError(data.error || "Invalid OTP");
@@ -115,7 +116,7 @@ export default function VolunteerLogin() {
           </>
         )}
         {error && <div className="mt-4 text-red-600 text-sm font-semibold">{error}</div>}
-        <div className="mt-6 text-xs text-gray-500 text-center">
+        <div className="mt-6 text-xs text-gray-700 text-center">
           By registering, you agree to volunteer safety guidelines and data privacy policy.
         </div>
       </div>
