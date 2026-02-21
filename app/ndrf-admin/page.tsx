@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import React, { useState, useEffect } from "react";
+import { useState } from "react";
 import {
   Eye,
   MessageSquare,
@@ -40,7 +40,6 @@ import {
   Brain,
   ShieldCheck,
   Info,
-  Send,
 } from "lucide-react";
 import {
   cn,
@@ -484,41 +483,50 @@ function DashboardTab() {
 // Prediction Tab Component
 function PredictionTab() {
   const [activeModel, setActiveModel] = useState("all");
-  const [predictions, setPredictions] = useState<any[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
 
-  // Fetch predictions from API
-  const fetchPredictions = async () => {
-    try {
-      setLoading(true);
-      setError(null);
-      
-      const response = await fetch('/api/predictions');
-      const data = await response.json();
-      
-      if (data.fallback) {
-        setError(data.error);
-      }
-      
-      setPredictions(data.predictions || []);
-    } catch (err) {
-      setError('Failed to load predictions. Please ensure the backend server is running.');
-      console.error('Error fetching predictions:', err);
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  // Fetch on mount and set up polling
-  React.useEffect(() => {
-    fetchPredictions();
-    
-    // Refresh predictions every 5 minutes
-    const interval = setInterval(fetchPredictions, 5 * 60 * 1000);
-    
-    return () => clearInterval(interval);
-  }, []);
+  const predictions = [
+    {
+      id: 1,
+      type: "cyclone",
+      state: "Odisha",
+      district: "Puri",
+      severity: "CRITICAL",
+      confidence: 87.5,
+      date: "2026-02-23",
+      model: "cyclone_predictor_v3",
+      affectedArea: "2,500 km²",
+      affectedPeople: "1.5 Lakh",
+      description:
+        "Deep depression in Bay of Bengal likely to intensify into a severe cyclonic storm.",
+    },
+    {
+      id: 2,
+      type: "flood",
+      state: "Assam",
+      district: "Kaziranga",
+      severity: "HIGH",
+      confidence: 79.3,
+      date: "2026-02-24",
+      model: "flood_predictor_v2",
+      affectedArea: "1,800 km²",
+      affectedPeople: "85,000",
+      description: "Brahmaputra river levels rising due to heavy rainfall.",
+    },
+    {
+      id: 3,
+      type: "earthquake",
+      state: "Gujarat",
+      district: "Kutch",
+      severity: "HIGH",
+      confidence: 65.2,
+      date: "2026-02-25",
+      model: "seismic_predictor_v1",
+      affectedArea: "3,200 km²",
+      affectedPeople: "2.1 Lakh",
+      description:
+        "Seismic activity detected near Kutch fault line. Moderate earthquake possible.",
+    },
+  ];
 
   const models = [
     { id: "all", label: "All Models" },
@@ -527,22 +535,12 @@ function PredictionTab() {
     { id: "earthquake", label: "🌍 Earthquake" },
     { id: "landslide", label: "⛰️ Landslide" },
     { id: "heatwave", label: "🌡️ Heatwave" },
-    { id: "forest_fire", label: "🔥 Forest Fire" },
   ];
 
-  // Strict filtering by disaster type
   const filtered =
     activeModel === "all"
       ? predictions
-      : predictions.filter((p) => {
-          const predictionType = (p.type || "").toLowerCase().trim();
-          const filterType = activeModel.toLowerCase().trim();
-          const matches = predictionType === filterType;
-          return matches;
-        });
-
-  // Debug log to verify filtering
-  console.log(`[Filter Debug] Active model: "${activeModel}", Total predictions: ${predictions.length}, Filtered: ${filtered.length}`);
+      : predictions.filter((p) => p.type === activeModel);
 
   return (
     <div className="space-y-6">
@@ -557,195 +555,84 @@ function PredictionTab() {
 
       {/* Model selector */}
       <div className="flex flex-wrap gap-2">
-        {models.map((m) => {
-          const count = m.id === "all" 
-            ? predictions.length 
-            : predictions.filter((p) => {
-                const predictionType = (p.type || "").toLowerCase().trim();
-                return predictionType === m.id.toLowerCase().trim();
-              }).length;
-          
-          return (
-            <button
-              key={m.id}
-              onClick={() => setActiveModel(m.id)}
-              className={cn(
-                "px-4 py-2 rounded-lg text-sm font-medium border transition-colors",
-                activeModel === m.id
-                  ? "bg-blue-600 text-white border-blue-600"
-                  : "bg-white text-gray-700 border-gray-300 hover:border-blue-300"
-              )}
-            >
-              {m.label}
-              <span className="ml-2 px-1.5 py-0.5 rounded text-xs font-bold bg-black bg-opacity-20">
-                {count}
-              </span>
-            </button>
-          );
-        })}
+        {models.map((m) => (
+          <button
+            key={m.id}
+            onClick={() => setActiveModel(m.id)}
+            className={cn(
+              "px-4 py-2 rounded-lg text-sm font-medium border transition-colors",
+              activeModel === m.id
+                ? "bg-blue-600 text-white border-blue-600"
+                : "bg-white text-gray-700 border-gray-300 hover:border-blue-300"
+            )}
+          >
+            {m.label}
+          </button>
+        ))}
       </div>
 
-      {/* Error message */}
-      {error && (
-        <div className="bg-red-50 border border-red-200 rounded-lg p-4">
-          <div className="flex items-start gap-3">
-            <AlertTriangle className="w-5 h-5 text-red-600 flex-shrink-0 mt-0.5" />
-            <div>
-              <p className="text-sm text-red-800 font-medium">Backend Service Unavailable</p>
-              <p className="text-sm text-red-700 mt-1">{error}</p>
-              <p className="text-xs text-red-600 mt-2">
-                Please run: <code className="bg-red-100 px-2 py-0.5 rounded">cd backend && python main.py</code>
-              </p>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* Loading state */}
-      {loading && !error && (
-        <div className="flex items-center justify-center py-12">
-          <div className="text-center">
-            <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto mb-4"></div>
-            <p className="text-gray-600">
-              {activeModel === "all" 
-                ? "Loading disaster predictions..." 
-                : `Loading ${activeModel} predictions...`}
-            </p>
-          </div>
-        </div>
-      )}
-
       {/* Predictions list */}
-      {!loading && !error && filtered.length === 0 && (
-        <div className="bg-blue-50 border border-blue-200 rounded-lg p-8 text-center">
-          <Info className="w-12 h-12 text-blue-400 mx-auto mb-3" />
-          <p className="text-blue-900 font-medium mb-2">
-            {activeModel === "all" 
-              ? "No Risks Detected" 
-              : `No ${activeModel.charAt(0).toUpperCase() + activeModel.slice(1)} Risk Detected`}
-          </p>
-          <p className="text-blue-700 text-sm">
-            {activeModel === "all" 
-              ? "All monitored locations are safe. No disaster risks detected at this time." 
-              : `No ${activeModel} risk detected in monitored areas.`}
-          </p>
-          <p className="text-blue-600 text-xs mt-3">
-            System monitors real-time data. Predictions appear only when actual risk exists.
-          </p>
-        </div>
-      )}
-
-      {!loading && filtered.length > 0 && (
-        <div className="space-y-4">
-          {filtered.map((p) => (
-            <div
-              key={p.id}
-              className="bg-gray-50 p-5 rounded-lg border border-gray-200"
-            >
-              <div className="flex items-start gap-4">
-                <span className="text-3xl">{getDisasterIcon(p.type)}</span>
-                <div className="flex-1">
-                  <div className="flex items-center gap-2 flex-wrap mb-2">
-                    <span className="font-semibold text-gray-900 text-lg capitalize">
-                      {p.type}
-                    </span>
-                    <span
-                      className={cn(
-                        "text-xs px-2 py-1 rounded border font-medium",
-                        getSeverityColor(p.severity)
-                      )}
-                    >
-                      {p.severity}
-                    </span>
-                  </div>
-                  <div className="text-sm text-gray-600 mb-2">
-                    <MapPin className="w-3 h-3 inline mr-1" />
-                    {p.location && `${p.location}, `}{p.district}, {p.state}
-                  </div>
-                  <p className="text-sm text-gray-700 mb-3">{p.description}</p>
-                  
-                  {/* 7-Day Forecast Timeline */}
-                  {p.forecast_7day && p.forecast_dates && (
-                    <div className="bg-white p-4 rounded-lg border border-gray-200 mb-3">
-                      <div className="text-xs font-semibold text-gray-700 mb-3">7-Day Forecast</div>
-                      <div className="flex gap-2">
-                        {p.forecast_7day.map((risk: number, index: number) => {
-                          const date = new Date(p.forecast_dates[index]);
-                          const dayName = date.toLocaleDateString('en-US', { weekday: 'short' });
-                          const dayNum = date.getDate();
-                          
-                          let riskColor = 'bg-green-100 border-green-300 text-green-800';
-                          let riskLabel = 'Low';
-                          
-                          if (risk >= 80) {
-                            riskColor = 'bg-red-100 border-red-400 text-red-900';
-                            riskLabel = 'Critical';
-                          } else if (risk >= 60) {
-                            riskColor = 'bg-orange-100 border-orange-400 text-orange-900';
-                            riskLabel = 'High';
-                          } else if (risk >= 40) {
-                            riskColor = 'bg-yellow-100 border-yellow-400 text-yellow-900';
-                            riskLabel = 'Moderate';
-                          }
-                          
-                          return (
-                            <div key={index} className="flex-1 min-w-0">
-                              <div className={cn(
-                                "rounded-lg border-2 p-2 text-center transition-all hover:shadow-md",
-                                riskColor,
-                                p.date === p.forecast_dates[index] && "ring-2 ring-blue-500"
-                              )}>
-                                <div className="text-xs font-bold">{dayName}</div>
-                                <div className="text-xs opacity-75">{dayNum}</div>
-                                <div className="mt-2 text-lg font-bold">{risk}%</div>
-                                <div className="text-xs mt-1">{riskLabel}</div>
-                              </div>
-                            </div>
-                          );
-                        })}
-                      </div>
-                      <div className="text-xs text-gray-500 mt-2 flex items-center gap-1">
-                        <div className="w-2 h-2 rounded-full bg-blue-500"></div>
-                        Peak risk day highlighted
-                      </div>
-                    </div>
-                  )}
-                  
-                  <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-3">
-                    <div className="bg-white p-2 rounded border border-gray-200">
-                      <div className="text-xs text-gray-500">Confidence</div>
-                      <div className="text-sm font-bold text-green-600">
-                        {p.confidence}%
-                      </div>
-                    </div>
-                    <div className="bg-white p-2 rounded border border-gray-200">
-                      <div className="text-xs text-gray-500">Peak Date</div>
-                      <div className="text-sm font-bold text-gray-900">
-                        {p.date}
-                      </div>
-                    </div>
-                    <div className="bg-white p-2 rounded border border-gray-200">
-                      <div className="text-xs text-gray-500">Affected Area</div>
-                      <div className="text-sm font-bold text-gray-900">
-                        {p.affectedArea}
-                      </div>
-                    </div>
-                    <div className="bg-white p-2 rounded border border-gray-200">
-                      <div className="text-xs text-gray-500">People at Risk</div>
-                      <div className="text-sm font-bold text-gray-900">
-                        {p.affectedPeople}
-                      </div>
+      <div className="space-y-4">
+        {filtered.map((p) => (
+          <div
+            key={p.id}
+            className="bg-gray-50 p-5 rounded-lg border border-gray-200"
+          >
+            <div className="flex items-start gap-4">
+              <span className="text-3xl">{getDisasterIcon(p.type)}</span>
+              <div className="flex-1">
+                <div className="flex items-center gap-2 flex-wrap mb-2">
+                  <span className="font-semibold text-gray-900 text-lg capitalize">
+                    {p.type}
+                  </span>
+                  <span
+                    className={cn(
+                      "text-xs px-2 py-1 rounded border font-medium",
+                      getSeverityColor(p.severity)
+                    )}
+                  >
+                    {p.severity}
+                  </span>
+                </div>
+                <div className="text-sm text-gray-600 mb-2">
+                  <MapPin className="w-3 h-3 inline mr-1" />
+                  {p.district}, {p.state}
+                </div>
+                <p className="text-sm text-gray-700 mb-3">{p.description}</p>
+                <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-3">
+                  <div className="bg-white p-2 rounded border border-gray-200">
+                    <div className="text-xs text-gray-500">Confidence</div>
+                    <div className="text-sm font-bold text-green-600">
+                      {p.confidence}%
                     </div>
                   </div>
-                  <div className="text-xs text-gray-500 font-mono">
-                    Model: {p.model}
+                  <div className="bg-white p-2 rounded border border-gray-200">
+                    <div className="text-xs text-gray-500">Date</div>
+                    <div className="text-sm font-bold text-gray-900">
+                      {p.date}
+                    </div>
                   </div>
+                  <div className="bg-white p-2 rounded border border-gray-200">
+                    <div className="text-xs text-gray-500">Affected Area</div>
+                    <div className="text-sm font-bold text-gray-900">
+                      {p.affectedArea}
+                    </div>
+                  </div>
+                  <div className="bg-white p-2 rounded border border-gray-200">
+                    <div className="text-xs text-gray-500">People at Risk</div>
+                    <div className="text-sm font-bold text-gray-900">
+                      {p.affectedPeople}
+                    </div>
+                  </div>
+                </div>
+                <div className="text-xs text-gray-500 font-mono">
+                  Model: {p.model}
                 </div>
               </div>
             </div>
-          ))}
-        </div>
-      )}
+          </div>
+        ))}
+      </div>
     </div>
   );
 }
@@ -944,140 +831,6 @@ function SOSTab() {
   const [showSOSModal, setShowSOSModal] = useState(false);
   const [selectedSOS, setSelectedSOS] = useState<any>(null);
   const [sosResponse, setSOSResponse] = useState<any>(null);
-  const [sendingRescueAlert, setSendingRescueAlert] = useState<string | null>(null);
-  const [sendingCitizenAlert, setSendingCitizenAlert] = useState<string | null>(null);
-  const [alertResponse, setAlertResponse] = useState<any>(null);
-  const [showAlertModal, setShowAlertModal] = useState(false);
-  const [showForwardModal, setShowForwardModal] = useState(false);
-  const [selectedTeam, setSelectedTeam] = useState<string | null>(null);
-  const [forwardingTeam, setForwardingTeam] = useState(false);
-
-  // Function to send alert to rescue teams
-  const handleSendRescueAlert = async (sos: any) => {
-    setSendingRescueAlert(sos.id);
-    setAlertResponse(null);
-    
-    try {
-      const response = await fetch("http://localhost:8000/api/alerts/rescue-team", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          disaster_id: sos.id,
-          disaster_type: sos.disasterType,
-          title: sos.title,
-          description: sos.description,
-          severity: sos.severity,
-          location: sos.address,
-          affected_area: `${sos.affectedFamilies} families affected`,
-          affected_people: `${sos.injuredCount} injured`,
-          sent_by: "NDRF_ADMIN"
-        })
-      });
-      
-      const data = await response.json();
-      
-      if (data.success) {
-        setAlertResponse({
-          type: 'rescue',
-          ...data.data
-        });
-        setShowAlertModal(true);
-      } else {
-        alert("Failed to send rescue team alert: " + (data.detail || "Unknown error"));
-      }
-    } catch (error) {
-      console.error("Error sending rescue team alert:", error);
-      alert("Failed to send rescue team alert. Please ensure backend is running.");
-    } finally {
-      setSendingRescueAlert(null);
-    }
-  };
-
-  // Function to send alert to citizens
-  const handleSendCitizenAlert = async (sos: any) => {
-    setSendingCitizenAlert(sos.id);
-    setAlertResponse(null);
-    
-    try {
-      const response = await fetch("http://localhost:8000/api/alerts/citizen", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          disaster_id: sos.id,
-          disaster_type: sos.disasterType,
-          title: `⚠️ ${sos.disasterType.toUpperCase()} ALERT: ${sos.title}`,
-          description: sos.description,
-          severity: sos.severity,
-          location: sos.address,
-          affected_area: `${sos.affectedFamilies} families affected`,
-          affected_people: `${sos.injuredCount} injured`,
-          safety_instructions: getSafetyInstructions(sos.disasterType),
-          sent_by: "NDRF_ADMIN"
-        })
-      });
-      
-      const data = await response.json();
-      
-      if (data.success) {
-        setAlertResponse({
-          type: 'citizen',
-          ...data.data
-        });
-        setShowAlertModal(true);
-      } else {
-        alert("Failed to send citizen alert: " + (data.detail || "Unknown error"));
-      }
-    } catch (error) {
-      console.error("Error sending citizen alert:", error);
-      alert("Failed to send citizen alert. Please ensure backend is running.");
-    } finally {
-      setSendingCitizenAlert(null);
-    }
-  };
-
-  // Get safety instructions based on disaster type
-  const getSafetyInstructions = (disasterType: string): string => {
-    const instructions: Record<string, string> = {
-      flood: "Move to higher ground immediately. Do not walk through moving water. Avoid contact with floodwater. Listen to authorities.",
-      fire: "Evacuate immediately. Stay low to avoid smoke. Do not use elevators. Call emergency services.",
-      forest_fire: "Evacuate if ordered. Close all windows and doors. Move to a cleared area. Monitor air quality. Stay indoors if smoke is heavy.",
-      earthquake: "Drop, Cover, and Hold On. Stay away from windows. If outside, move away from buildings. After shaking stops, evacuate carefully.",
-      cyclone: "Stay indoors. Move to a safe room away from windows. Stock emergency supplies. Follow evacuation orders.",
-      landslide: "Move away from the path of the landslide. Do not return until area is declared safe. Watch for flooding.",
-      heatwave: "Stay hydrated. Avoid outdoor activities during peak heat. Stay in air-conditioned areas. Check on vulnerable persons."
-    };
-    return instructions[disasterType.toLowerCase()] || "Follow local authority instructions. Stay safe and alert.";
-  };
-
-  // Function to open forward modal
-  const handleForwardSOS = (sos: any) => {
-    setSelectedSOS(sos);
-    setShowForwardModal(true);
-    setSelectedTeam(null);
-  };
-
-  // Function to forward SOS to selected team
-  const confirmForwardSOS = async () => {
-    if (!selectedSOS || !selectedTeam) return;
-    
-    setForwardingTeam(true);
-    
-    try {
-      // Simulate forwarding to team (you can integrate with backend later)
-      await new Promise(resolve => setTimeout(resolve, 1500));
-      
-      alert(`✅ SOS successfully forwarded to ${selectedTeam}\n\nIncident: ${selectedSOS.title}\nLocation: ${selectedSOS.address}\n\nThe team has been notified and will respond shortly.`);
-      
-      setShowForwardModal(false);
-      setSelectedSOS(null);
-      setSelectedTeam(null);
-    } catch (error) {
-      console.error("Error forwarding SOS:", error);
-      alert("Failed to forward SOS. Please try again.");
-    } finally {
-      setForwardingTeam(false);
-    }
-  };
 
   // Function to send SOS to all volunteers
   const handleSendSOS = async (sos: any) => {
@@ -1316,36 +1069,11 @@ function SOSTab() {
                   </div>
                 </div>
                 <div className="flex gap-2 flex-wrap">
-                  <button 
-                    onClick={() => handleForwardSOS(sos)}
-                    className="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition text-sm font-medium flex items-center gap-2"
-                  >
-                    📤 Forward SOS
+                  <button className="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition text-sm font-medium">
+                    ✅ Verify
                   </button>
                   <button className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition text-sm font-medium">
                     🚁 Dispatch Team
-                  </button>
-                  <button 
-                    onClick={() => handleSendRescueAlert(sos)}
-                    disabled={sendingRescueAlert === sos.id}
-                    className="px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 transition text-sm font-medium disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
-                  >
-                    {sendingRescueAlert === sos.id ? (
-                      <>⏳ Sending...</>
-                    ) : (
-                      <>🚒 Rescue Team Alert</>
-                    )}
-                  </button>
-                  <button 
-                    onClick={() => handleSendCitizenAlert(sos)}
-                    disabled={sendingCitizenAlert === sos.id}
-                    className="px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition text-sm font-medium disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
-                  >
-                    {sendingCitizenAlert === sos.id ? (
-                      <>⏳ Sending...</>
-                    ) : (
-                      <>📱 Citizen Alert</>
-                    )}
                   </button>
                   <button 
                     onClick={() => handleSendSOS(sos)}
@@ -1367,106 +1095,6 @@ function SOSTab() {
           </div>
         ))}
       </div>
-
-      {/* Forward SOS Modal */}
-      {showForwardModal && selectedSOS && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-xl shadow-2xl max-w-2xl w-full">
-            <div className="bg-gradient-to-r from-green-600 to-emerald-600 text-white p-6 rounded-t-xl">
-              <h3 className="text-2xl font-bold flex items-center gap-2">
-                <Send className="w-6 h-6" />
-                Forward SOS to Response Team
-              </h3>
-              <p className="text-green-100 mt-1">Select the appropriate team to handle this emergency</p>
-            </div>
-            
-            <div className="p-6 space-y-4">
-              {/* Incident Details */}
-              <div className="bg-gray-50 border border-gray-200 rounded-lg p-4">
-                <h5 className="font-semibold text-gray-900 mb-2">📋 Incident Details</h5>
-                <div className="space-y-1 text-sm">
-                  <div><span className="text-gray-600">Type:</span> <span className="font-medium text-gray-900">{selectedSOS.disasterType}</span></div>
-                  <div><span className="text-gray-600">Title:</span> <span className="font-medium text-gray-900">{selectedSOS.title}</span></div>
-                  <div><span className="text-gray-600">Location:</span> <span className="font-medium text-gray-900">{selectedSOS.address}</span></div>
-                  <div><span className="text-gray-600">Severity:</span> <span className="font-medium text-red-600">{selectedSOS.severity}</span></div>
-                </div>
-              </div>
-
-              {/* Team Selection */}
-              <div>
-                <h5 className="font-semibold text-gray-900 mb-3">🚨 Select Response Team:</h5>
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                  {[
-                    { id: 'fire', name: '🚒 Fire Department', desc: 'Fire, rescue operations' },
-                    { id: 'police', name: '👮 Police / Defense Team', desc: 'Security, crowd control' },
-                    { id: 'medical', name: '🚑 Medical / Ambulance', desc: 'Medical emergencies, injuries' },
-                    { id: 'ndrf', name: '🛡️ NDRF', desc: 'Disaster response force' },
-                    { id: 'civil', name: '🏛️ Civil Defense', desc: 'Civil protection, evacuation' },
-                    { id: 'power', name: '⚡ Power Department', desc: 'Electrical emergencies' },
-                    { id: 'water', name: '💧 Water & Sanitation', desc: 'Water supply, sanitation' },
-                    { id: 'forest', name: '🌲 Forest Department', desc: 'Forest fires, wildlife' },
-                  ].map((team) => (
-                    <button
-                      key={team.id}
-                      onClick={() => setSelectedTeam(team.name)}
-                      className={cn(
-                        "text-left p-4 rounded-lg border-2 transition-all",
-                        selectedTeam === team.name
-                          ? "border-green-600 bg-green-50"
-                          : "border-gray-200 bg-white hover:border-green-300 hover:bg-green-50"
-                      )}
-                    >
-                      <div className="font-semibold text-gray-900 mb-1">{team.name}</div>
-                      <div className="text-xs text-gray-600">{team.desc}</div>
-                    </button>
-                  ))}
-                </div>
-              </div>
-
-              {selectedTeam && (
-                <div className="bg-green-50 border border-green-200 rounded-lg p-4">
-                  <p className="text-sm text-green-800 flex items-center gap-2">
-                    <CheckCircle2 className="w-4 h-4" />
-                    <span>Selected team: <strong>{selectedTeam}</strong></span>
-                  </p>
-                </div>
-              )}
-
-              {/* Actions */}
-              <div className="flex justify-end gap-3 pt-4 border-t">
-                <button
-                  onClick={() => {
-                    setShowForwardModal(false);
-                    setSelectedSOS(null);
-                    setSelectedTeam(null);
-                  }}
-                  className="px-6 py-2 border border-gray-300 rounded-lg hover:bg-gray-50 transition font-medium"
-                  disabled={forwardingTeam}
-                >
-                  Cancel
-                </button>
-                <button
-                  onClick={confirmForwardSOS}
-                  disabled={!selectedTeam || forwardingTeam}
-                  className="px-6 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition font-medium disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
-                >
-                  {forwardingTeam ? (
-                    <>
-                      <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
-                      Forwarding...
-                    </>
-                  ) : (
-                    <>
-                      <Send className="w-4 h-4" />
-                      Forward to Team
-                    </>
-                  )}
-                </button>
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
 
       {/* SOS Alert Confirmation Modal */}
       {showSOSModal && selectedSOS && (
@@ -1643,123 +1271,6 @@ function SOSTab() {
                 </div>
               </div>
             )}
-          </div>
-        </div>
-      )}
-
-      {/* Alert Success Modal */}
-      {showAlertModal && alertResponse && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-xl shadow-2xl max-w-2xl w-full max-h-[90vh] overflow-y-auto">
-            <div className={cn(
-              "text-white p-6 rounded-t-xl",
-              alertResponse.type === 'rescue' 
-                ? "bg-gradient-to-r from-purple-600 to-indigo-600" 
-                : "bg-gradient-to-r from-indigo-600 to-blue-600"
-            )}>
-              <h3 className="text-2xl font-bold flex items-center gap-2">
-                {alertResponse.type === 'rescue' ? (
-                  <>
-                    <Radio className="w-6 h-6" />
-                    Rescue Team Alert Sent
-                  </>
-                ) : (
-                  <>
-                    <Radio className="w-6 h-6" />
-                    Citizen Alert Sent
-                  </>
-                )}
-              </h3>
-              <p className="text-white opacity-90 mt-1">
-                {alertResponse.type === 'rescue' 
-                  ? "Emergency alert broadcast to rescue teams" 
-                  : "Mass notification sent to citizens in affected area"}
-              </p>
-            </div>
-            
-            <div className="p-6 space-y-4">
-              <div className="bg-green-50 border border-green-200 rounded-lg p-4">
-                <div className="flex items-start gap-3">
-                  <CheckCircle2 className="w-6 h-6 text-green-600 flex-shrink-0 mt-0.5" />
-                  <div>
-                    <p className="font-semibold text-green-900">Alert Sent Successfully</p>
-                    <p className="text-sm text-green-700 mt-1">{alertResponse.message}</p>
-                  </div>
-                </div>
-              </div>
-
-              <div className="grid grid-cols-2 gap-3">
-                <div className="bg-gray-50 p-3 rounded-lg">
-                  <div className="text-xs text-gray-500 mb-1">Disaster Type</div>
-                  <div className="font-medium text-gray-900 capitalize">{alertResponse.disaster_type}</div>
-                </div>
-                <div className="bg-gray-50 p-3 rounded-lg">
-                  <div className="text-xs text-gray-500 mb-1">
-                    {alertResponse.type === 'rescue' ? 'Teams Notified' : 'Citizens Notified'}
-                  </div>
-                  <div className="font-medium text-gray-900">
-                    {alertResponse.type === 'rescue' 
-                      ? alertResponse.teams_notified 
-                      : alertResponse.citizens_notified?.toLocaleString()}
-                  </div>
-                </div>
-              </div>
-
-              {alertResponse.type === 'rescue' && alertResponse.rescue_teams && (
-                <div className="bg-gray-50 border border-gray-200 rounded-lg p-4 max-h-60 overflow-y-auto">
-                  <h5 className="font-semibold text-gray-900 mb-3 flex items-center gap-2">
-                    <Users className="w-4 h-4" />
-                    Notified Rescue Teams
-                  </h5>
-                  <div className="space-y-2">
-                    {alertResponse.rescue_teams.map((team: any, idx: number) => (
-                      <div key={idx} className="bg-white p-3 rounded border border-gray-200 text-sm">
-                        <div className="font-medium text-gray-900">{team.team_name}</div>
-                        <div className="text-xs text-gray-500 mt-1">
-                          <Phone className="w-3 h-3 inline mr-1" />
-                          {team.contact_number}
-                        </div>
-                        <div className="text-xs text-blue-600 mt-1">
-                          <MapPin className="w-3 h-3 inline mr-1" />
-                          {team.location}
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              )}
-
-              {alertResponse.type === 'citizen' && alertResponse.sample_recipients && (
-                <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
-                  <p className="text-sm text-blue-800 flex items-start gap-2">
-                    <Info className="w-4 h-4 flex-shrink-0 mt-0.5" />
-                    <span>
-                      Alert sent to <strong>{alertResponse.citizens_notified?.toLocaleString()}</strong> citizens 
-                      in <strong>{alertResponse.location}</strong> via SMS, Email, and Push Notifications.
-                    </span>
-                  </p>
-                </div>
-              )}
-
-              <div className="bg-gray-50 p-3 rounded-lg">
-                <div className="text-xs text-gray-500 mb-1">Sent At</div>
-                <div className="text-sm font-medium text-gray-900">
-                  {new Date(alertResponse.sent_at).toLocaleString()}
-                </div>
-              </div>
-
-              <div className="flex justify-end pt-4 border-t">
-                <button
-                  onClick={() => {
-                    setShowAlertModal(false);
-                    setAlertResponse(null);
-                  }}
-                  className="px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition font-medium"
-                >
-                  Close
-                </button>
-              </div>
-            </div>
           </div>
         </div>
       )}

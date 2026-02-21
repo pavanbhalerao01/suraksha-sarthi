@@ -6,7 +6,7 @@ generator client {
 }
 
 datasource db {
-  provider = "sqlite"
+  provider = "postgresql"
   url      = env("DATABASE_URL")
 }
 
@@ -29,11 +29,13 @@ model Region {
   riskScores    RiskScore[]
   disasters     Disaster[]
   infrastructure Infrastructure[]
-  userProfiles  UserProfile[]
-  incidents     Incident[]
-  volunteers    Volunteer[]
-  tasks         Task[]
-  resources     Resource[]
+  
+  // Multi-user system relations
+  userProfiles  UserProfile[]  @relation("DistrictUsers")
+  incidents     Incident[]     @relation("RegionIncidents")
+  volunteers    Volunteer[]    @relation("VolunteerRegion")
+  tasks         Task[]         @relation("TaskRegion")
+  resources     Resource[]     @relation("ResourceRegion")
   
   createdAt     DateTime @default(now())
   updatedAt     DateTime @updatedAt
@@ -229,7 +231,7 @@ model UserProfile {
   user            User     @relation(fields: [userId], references: [id], onDelete: Cascade)
   
   districtId      String?  // For Collectors and field officers
-  district        Region?  @relation(fields: [districtId], references: [id])
+  district        Region?  @relation("DistrictUsers", fields: [districtId], references: [id])
   
   organization    String?  // NDRF battalion, NGO name
   designation     String?  // Collector, Commandant, etc.
@@ -283,7 +285,7 @@ model Incident {
   location        String          // GeoJSON point { lat, lng }
   address         String?
   regionId        String?
-  region          Region?         @relation(fields: [regionId], references: [id])
+  region          Region?         @relation("RegionIncidents", fields: [regionId], references: [id])
   
   reportedById    String
   reportedBy      User            @relation("ReportedBy", fields: [reportedById], references: [id])
@@ -327,7 +329,7 @@ model Volunteer {
   
   // Location preferences
   preferredRegionId String?
-  preferredRegion   Region?       @relation(fields: [preferredRegionId], references: [id])
+  preferredRegion   Region?       @relation("VolunteerRegion", fields: [preferredRegionId], references: [id])
   
   // Availability
   isAvailable     Boolean         @default(true)
@@ -359,7 +361,7 @@ model Task {
   
   location        String      // GeoJSON point
   regionId        String?
-  region          Region?     @relation(fields: [regionId], references: [id])
+  region          Region?     @relation("TaskRegion", fields: [regionId], references: [id])
   
   assignedToId    String?
   assignedTo      Volunteer?  @relation(fields: [assignedToId], references: [id])
@@ -422,7 +424,7 @@ model Resource {
   
   location        String      // GeoJSON point where resource is available
   regionId        String?
-  region          Region?     @relation(fields: [regionId], references: [id])
+  region          Region?     @relation("ResourceRegion", fields: [regionId], references: [id])
   
   status          String      // 'available', 'allocated', 'delivered'
   allocatedTo     String?     // Incident ID or relief camp ID
@@ -435,5 +437,47 @@ model Resource {
   @@index([ngoId])
   @@index([status])
   @@index([regionId])
+}
+
+// SOS Alerts sent to volunteers
+model SosAlert {
+  id                String      @id @default(cuid())
+  
+  // Incident details
+  incidentId        String      // Reference to the disaster/incident
+  disasterType      String      // 'flood', 'fire', 'building_collapse', etc.
+  title             String
+  description       String
+  severity          String      // 'low', 'medium', 'high', 'critical'
+  
+  // Location details
+  location          String      // GeoJSON point { lat, lng }
+  address           String
+  
+  // Complainant/Reporter details
+  reporterName      String
+  reporterPhone     String
+  
+  // Required skills for this disaster
+  requiredSkills    String      // JSON array: ["diver", "swimmer", "boat_operator"]
+  
+  // Alert metadata
+  sentBy            String      // Admin user ID who triggered the SOS
+  sentAt            DateTime    @default(now())
+  
+  // Volunteers notified (stored as JSON array of volunteer IDs)
+  volunteersNotified String     // ["vol-id-1", "vol-id-2", "vol-id-3"]
+  totalVolunteersNotified Int   @default(0)
+  
+  // Response tracking
+  volunteersResponded  String?  // JSON array of volunteer IDs who responded
+  totalVolunteersResponded Int  @default(0)
+  
+  createdAt         DateTime    @default(now())
+  updatedAt         DateTime    @updatedAt
+  
+  @@index([incidentId])
+  @@index([sentAt])
+  @@index([disasterType])
 }
 
