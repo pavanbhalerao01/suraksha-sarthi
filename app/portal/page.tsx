@@ -152,7 +152,12 @@ export default function PortalSelectionPage() {
       </header>
 
       {/* Main Content */}
-      <main const isActionTeam = portal.id === 'action-team';
+      <main className="container mx-auto px-4 py-12">
+        <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-8 max-w-7xl mx-auto">
+          {portals.map((portal) => {
+            const Icon = portal.icon;
+            const isSelected = selectedPortal === portal.id;
+            const isActionTeam = portal.id === 'action-team';
             
             return (
               <div
@@ -252,23 +257,7 @@ export default function PortalSelectionPage() {
                         Enter Portal
                       </button>
                     </Link>
-                  )}span className="text-sm text-gray-700">{feature}</span>
-                      </div>
-                    ))}
-                  </div>
-
-                  {/* Action Button */}
-                  <Link href={portal.href}>
-                    <button
-                      className={`
-                        w-full py-3 px-4 rounded-lg font-semibold text-white
-                        bg-${portal.color}-600 hover:bg-${portal.color}-700
-                        transition-colors duration-200
-                      `}
-                    >
-                      Enter Portal
-                    </button>
-                  </Link>
+                  )}
                 </div>
               </div>
             );
