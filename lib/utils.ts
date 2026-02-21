@@ -109,6 +109,8 @@ export function getDisasterIcon(type: string) {
       return "☀️";
     case "fire":
       return "🔥";
+    case "forest_fire":
+      return "🔥";
     case "heatwave":
       return "🌡️";
     default:
