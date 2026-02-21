@@ -26,8 +26,8 @@ INDIAN_CITIES = [
     {"name": "Bhagalpur", "state": "Bihar", "lat": 25.2425, "lon": 86.9842, "district": "Bhagalpur", "tier": 3, "vulnerable_to": ["flood"]},
     
     # Chhattisgarh
-    {"name": "Raipur", "state": "Chhattisgarh", "lat": 21.2514, "lon": 81.6296, "district": "Raipur", "tier": 2, "vulnerable_to": ["heatwave"]},
-    {"name": "Bhilai", "state": "Chhattisgarh", "lat": 21.2095, "lon": 81.3790, "district": "Durg", "tier": 2, "vulnerable_to": ["heatwave"]},
+    {"name": "Raipur", "state": "Chhattisgarh", "lat": 21.2514, "lon": 81.6296, "district": "Raipur", "tier": 2, "vulnerable_to": ["heatwave", "forest_fire"]},
+    {"name": "Bhilai", "state": "Chhattisgarh", "lat": 21.2095, "lon": 81.3790, "district": "Durg", "tier": 2, "vulnerable_to": ["heatwave", "forest_fire"]},
     
     # Delhi
     {"name": "New Delhi", "state": "Delhi", "lat": 28.6139, "lon": 77.2090, "district": "New Delhi", "tier": 1, "vulnerable_to": ["heatwave", "earthquake"]},
@@ -49,16 +49,16 @@ INDIAN_CITIES = [
     {"name": "Chandigarh", "state": "Chandigarh", "lat": 30.7333, "lon": 76.7794, "district": "Chandigarh", "tier": 1, "vulnerable_to": ["heatwave"]},
     
     # Himachal Pradesh
-    {"name": "Shimla", "state": "Himachal Pradesh", "lat": 31.1048, "lon": 77.1734, "district": "Shimla", "tier": 3, "vulnerable_to": ["landslide", "earthquake"]},
-    {"name": "Manali", "state": "Himachal Pradesh", "lat": 32.2396, "lon": 77.1887, "district": "Kullu", "tier": 3, "vulnerable_to": ["landslide"]},
+    {"name": "Shimla", "state": "Himachal Pradesh", "lat": 31.1048, "lon": 77.1734, "district": "Shimla", "tier": 3, "vulnerable_to": ["landslide", "earthquake", "forest_fire"]},
+    {"name": "Manali", "state": "Himachal Pradesh", "lat": 32.2396, "lon": 77.1887, "district": "Kullu", "tier": 3, "vulnerable_to": ["landslide", "forest_fire"]},
     
     # Jharkhand
-    {"name": "Ranchi", "state": "Jharkhand", "lat": 23.3441, "lon": 85.3096, "district": "Ranchi", "tier": 2, "vulnerable_to": ["heatwave"]},
-    {"name": "Jamshedpur", "state": "Jharkhand", "lat": 22.8046, "lon": 86.2029, "district": "East Singhbhum", "tier": 2, "vulnerable_to": ["heatwave"]},
+    {"name": "Ranchi", "state": "Jharkhand", "lat": 23.3441, "lon": 85.3096, "district": "Ranchi", "tier": 2, "vulnerable_to": ["heatwave", "forest_fire"]},
+    {"name": "Jamshedpur", "state": "Jharkhand", "lat": 22.8046, "lon": 86.2029, "district": "East Singhbhum", "tier": 2, "vulnerable_to": ["heatwave", "forest_fire"]},
     
     # Karnataka
-    {"name": "Bengaluru", "state": "Karnataka", "lat": 12.9716, "lon": 77.5946, "district": "Bengaluru Urban", "tier": 1, "vulnerable_to": ["heatwave"]},
-    {"name": "Mysuru", "state": "Karnataka", "lat": 12.2958, "lon": 76.6394, "district": "Mysuru", "tier": 2, "vulnerable_to": ["heatwave"]},
+    {"name": "Bengaluru", "state": "Karnataka", "lat": 12.9716, "lon": 77.5946, "district": "Bengaluru Urban", "tier": 1, "vulnerable_to": ["heatwave", "forest_fire"]},
+    {"name": "Mysuru", "state": "Karnataka", "lat": 12.2958, "lon": 76.6394, "district": "Mysuru", "tier": 2, "vulnerable_to": ["heatwave", "forest_fire"]},
     {"name": "Mangaluru", "state": "Karnataka", "lat": 12.9141, "lon": 74.8560, "district": "Dakshina Kannada", "tier": 2, "vulnerable_to": ["flood", "cyclone"]},
     {"name": "Hubballi", "state": "Karnataka", "lat": 15.3647, "lon": 75.1240, "district": "Dharwad", "tier": 2, "vulnerable_to": ["flood"]},
     
@@ -69,18 +69,18 @@ INDIAN_CITIES = [
     {"name": "Thrissur", "state": "Kerala", "lat": 10.5276, "lon": 76.2144, "district": "Thrissur", "tier": 2, "vulnerable_to": ["flood"]},
     
     # Madhya Pradesh
-    {"name": "Bhopal", "state": "Madhya Pradesh", "lat": 23.2599, "lon": 77.4126, "district": "Bhopal", "tier": 2, "vulnerable_to": ["heatwave"]},
-    {"name": "Indore", "state": "Madhya Pradesh", "lat": 22.7196, "lon": 75.8577, "district": "Indore", "tier": 2, "vulnerable_to": ["heatwave"]},
-    {"name": "Jabalpur", "state": "Madhya Pradesh", "lat": 23.1815, "lon": 79.9864, "district": "Jabalpur", "tier": 2, "vulnerable_to": ["heatwave"]},
+    {"name": "Bhopal", "state": "Madhya Pradesh", "lat": 23.2599, "lon": 77.4126, "district": "Bhopal", "tier": 2, "vulnerable_to": ["heatwave", "forest_fire"]},
+    {"name": "Indore", "state": "Madhya Pradesh", "lat": 22.7196, "lon": 75.8577, "district": "Indore", "tier": 2, "vulnerable_to": ["heatwave", "forest_fire"]},
+    {"name": "Jabalpur", "state": "Madhya Pradesh", "lat": 23.1815, "lon": 79.9864, "district": "Jabalpur", "tier": 2, "vulnerable_to": ["heatwave", "forest_fire"]},
     {"name": "Gwalior", "state": "Madhya Pradesh", "lat": 26.2183, "lon": 78.1828, "district": "Gwalior", "tier": 2, "vulnerable_to": ["heatwave"]},
     
     # Maharashtra
     {"name": "Mumbai", "state": "Maharashtra", "lat": 19.0760, "lon": 72.8777, "district": "Mumbai", "tier": 1, "vulnerable_to": ["flood", "cyclone"]},
-    {"name": "Pune", "state": "Maharashtra", "lat": 18.5204, "lon": 73.8567, "district": "Pune", "tier": 1, "vulnerable_to": ["flood", "earthquake"]},
-    {"name": "Nagpur", "state": "Maharashtra", "lat": 21.1458, "lon": 79.0882, "district": "Nagpur", "tier": 2, "vulnerable_to": ["heatwave"]},
-    {"name": "Nashik", "state": "Maharashtra", "lat": 19.9975, "lon": 73.7898, "district": "Nashik", "tier": 2, "vulnerable_to": ["flood"]},
+    {"name": "Pune", "state": "Maharashtra", "lat": 18.5204, "lon": 73.8567, "district": "Pune", "tier": 1, "vulnerable_to": ["flood", "earthquake", "forest_fire"]},
+    {"name": "Nagpur", "state": "Maharashtra", "lat": 21.1458, "lon": 79.0882, "district": "Nagpur", "tier": 2, "vulnerable_to": ["heatwave", "forest_fire"]},
+    {"name": "Nashik", "state": "Maharashtra", "lat": 19.9975, "lon": 73.7898, "district": "Nashik", "tier": 2, "vulnerable_to": ["flood", "forest_fire"]},
     {"name": "Aurangabad", "state": "Maharashtra", "lat": 19.8762, "lon": 75.3433, "district": "Aurangabad", "tier": 2, "vulnerable_to": ["heatwave"]},
-    {"name": "Kolhapur", "state": "Maharashtra", "lat": 16.7050, "lon": 74.2433, "district": "Kolhapur", "tier": 2, "vulnerable_to": ["flood"]},
+    {"name": "Kolhapur", "state": "Maharashtra", "lat": 16.7050, "lon": 74.2433, "district": "Kolhapur", "tier": 2, "vulnerable_to": ["flood", "forest_fire"]},
     
     # Manipur
     {"name": "Imphal", "state": "Manipur", "lat": 24.8170, "lon": 93.9368, "district": "Imphal West", "tier": 3, "vulnerable_to": ["earthquake", "flood"]},
@@ -96,7 +96,7 @@ INDIAN_CITIES = [
     {"name": "Kohima", "state": "Nagaland", "lat": 25.6747, "lon": 94.1086, "district": "Kohima", "tier": 3, "vulnerable_to": ["landslide", "earthquake"]},
     
     # Odisha
-    {"name": "Bhubaneswar", "state": "Odisha", "lat": 20.2961, "lon": 85.8245, "district": "Khordha", "tier": 2, "vulnerable_to": ["cyclone", "flood", "heatwave"]},
+    {"name": "Bhubaneswar", "state": "Odisha", "lat": 20.2961, "lon": 85.8245, "district": "Khordha", "tier": 2, "vulnerable_to": ["cyclone", "flood", "heatwave", "forest_fire"]},
     {"name": "Cuttack", "state": "Odisha", "lat": 20.5000, "lon": 85.8833, "district": "Cuttack", "tier": 2, "vulnerable_to": ["cyclone", "flood"]},
     {"name": "Puri", "state": "Odisha", "lat": 19.8135, "lon": 85.8312, "district": "Puri", "tier": 3, "vulnerable_to": ["cyclone", "flood"]},
     {"name": "Berhampur", "state": "Odisha", "lat": 19.3150, "lon": 84.7941, "district": "Ganjam", "tier": 3, "vulnerable_to": ["cyclone"]},
@@ -138,7 +138,7 @@ INDIAN_CITIES = [
     {"name": "Meerut", "state": "Uttar Pradesh", "lat": 28.9845, "lon": 77.7064, "district": "Meerut", "tier": 2, "vulnerable_to": ["heatwave"]},
     
     # Uttarakhand
-    {"name": "Dehradun", "state": "Uttarakhand", "lat": 30.3165, "lon": 78.0322, "district": "Dehradun", "tier": 2, "vulnerable_to": ["landslide", "earthquake", "flood"]},
+    {"name": "Dehradun", "state": "Uttarakhand", "lat": 30.3165, "lon": 78.0322, "district": "Dehradun", "tier": 2, "vulnerable_to": ["landslide", "earthquake", "flood", "forest_fire"]},
     {"name": "Haridwar", "state": "Uttarakhand", "lat": 29.9457, "lon": 78.1642, "district": "Haridwar", "tier": 3, "vulnerable_to": ["flood"]},
     {"name": "Rishikesh", "state": "Uttarakhand", "lat": 30.0869, "lon": 78.2676, "district": "Dehradun", "tier": 3, "vulnerable_to": ["flood", "landslide"]},
     

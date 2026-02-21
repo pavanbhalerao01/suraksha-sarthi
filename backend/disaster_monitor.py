@@ -114,15 +114,36 @@ class DisasterMonitor:
         """
         Get cached predictions
         If disaster_type specified, filter by that type
+        Prioritizes Maharashtra cities (Mumbai, Pune first, then others)
         """
         predictions = self.cached_predictions
         
         if disaster_type and disaster_type != "all":
             predictions = [p for p in predictions if p["type"] == disaster_type]
         
+        # Sort predictions: Maharashtra cities first (Mumbai #1, Pune #2, then others), then rest of India
+        def get_priority(prediction):
+            location = prediction.get("location", "")
+            state = prediction.get("state", "")
+            
+            # Priority 1: Mumbai
+            if location == "Mumbai":
+                return 0
+            # Priority 2: Pune
+            elif location == "Pune":
+                return 1
+            # Priority 3: Other Maharashtra cities
+            elif state == "Maharashtra":
+                return 2
+            # Priority 4: Rest of India
+            else:
+                return 3
+        
+        sorted_predictions = sorted(predictions, key=get_priority)
+        
         return {
-            "predictions": predictions,
-            "total": len(predictions),
+            "predictions": sorted_predictions,
+            "total": len(sorted_predictions),
             "total_all_types": len(self.cached_predictions),
             "generated_at": self.last_update.isoformat() if self.last_update else None,
             "next_update": self.get_next_update_time(),

@@ -16,6 +16,9 @@ from pydantic import BaseModel
 from disaster_monitor import disaster_monitor
 from indian_cities import INDIAN_CITIES, get_city_count, get_cities_by_disaster
 
+# Import alert service
+from alert_service import alert_service
+
 # Configure logging
 logging.basicConfig(
     level=logging.INFO,
@@ -71,6 +74,37 @@ app.add_middleware(
 class CustomPredictionRequest(BaseModel):
     disaster_type: str  # cyclone, flood, earthquake, landslide, heatwave
     city_name: Optional[str] = None
+
+class RescueTeamAlertRequest(BaseModel):
+    disaster_id: str
+    disaster_type: str
+    title: str
+    description: str
+    severity: str
+    location: str
+    latitude: Optional[float] = None
+    longitude: Optional[float] = None
+    affected_area: Optional[str] = None
+    affected_people: Optional[str] = None
+    forecast_7day: Optional[List[int]] = None
+    peak_date: Optional[str] = None
+    sent_by: str = "NDRF_ADMIN"
+
+class CitizenAlertRequest(BaseModel):
+    disaster_id: str
+    disaster_type: str
+    title: str
+    description: str
+    severity: str
+    location: str
+    latitude: Optional[float] = None
+    longitude: Optional[float] = None
+    affected_area: Optional[str] = None
+    affected_people: Optional[str] = None
+    safety_instructions: Optional[str] = None
+    forecast_7day: Optional[List[int]] = None
+    peak_date: Optional[str] = None
+    sent_by: str = "NDRF_ADMIN"
 
 # =============================================================================
 # ROUTES
@@ -186,6 +220,82 @@ async def get_stats():
         },
         "timestamp": datetime.now().isoformat()
     }
+
+@app.post("/api/alerts/rescue-team")
+async def send_rescue_team_alert(request: RescueTeamAlertRequest):
+    """
+    Send alert to rescue teams for a disaster
+    
+    This endpoint:
+    - Identifies relevant rescue teams based on disaster type
+    - Saves alert to database
+    - Sends notifications to fire brigade, flood rescue, NDRF, etc.
+    - Returns list of teams notified
+    """
+    try:
+        alert_data = request.dict()
+        result = await alert_service.send_rescue_team_alert(alert_data)
+        
+        if result['success']:
+            logger.info(f"✅ Rescue team alert sent: {result['teams_notified']} teams notified")
+            return {
+                "success": True,
+                "data": result
+            }
+        else:
+            raise HTTPException(status_code=500, detail=result['message'])
+            
+    except Exception as e:
+        logger.error(f"Error sending rescue team alert: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.post("/api/alerts/citizen")
+async def send_citizen_alert(request: CitizenAlertRequest):
+    """
+    Send alert to all citizens in affected area
+    
+    This endpoint:
+    - Identifies citizens in the affected location
+    - Saves alert to database
+    - Sends mass notifications via SMS/Email/Push
+    - Returns count of citizens notified
+    """
+    try:
+        alert_data = request.dict()
+        result = await alert_service.send_citizen_alert(alert_data)
+        
+        if result['success']:
+            logger.info(f"✅ Citizen alert sent: {result['citizens_notified']} citizens notified")
+            return {
+                "success": True,
+                "data": result
+            }
+        else:
+            raise HTTPException(status_code=500, detail=result['message'])
+            
+    except Exception as e:
+        logger.error(f"Error sending citizen alert: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.get("/api/alerts/history")
+async def get_alert_history(alert_type: Optional[str] = None, limit: int = 50):
+    """
+    Get alert history
+    
+    Query params:
+    - alert_type: Filter by RESCUE_TEAM or CITIZEN (optional)
+    - limit: Maximum number of alerts to return (default: 50)
+    """
+    try:
+        alerts = await alert_service.get_alert_history(alert_type, limit)
+        return {
+            "success": True,
+            "alerts": alerts,
+            "total": len(alerts)
+        }
+    except Exception as e:
+        logger.error(f"Error getting alert history: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
 
 # =============================================================================
 # RUN SERVER
