@@ -70,37 +70,37 @@ export default function Home() {
             title="Risk Heatmap"
             description="Ward-level disaster risk visualization with real-time updates from IMD data"
             icon="🗺️"
-            href="/dashboard/heatmap"
+            href="/heatmap"
           />
           <FeatureCard
             title="7-Day Forecast"
             description="ML-powered multi-hazard predictions with confidence intervals"
             icon="📊"
-            href="/dashboard/forecast"
+            href="/forecast"
           />
           <FeatureCard
             title="Alert System"
             description="Hyper-local warnings via SMS and push notifications in multiple languages"
             icon="🚨"
-            href="/dashboard/alerts"
+            href="/alerts"
           />
           <FeatureCard
             title="Historical Analysis"
             description="Pattern recognition from 50+ years of Maharashtra disaster data"
             icon="📈"
-            href="/dashboard/history"
+            href="/history"
           />
           <FeatureCard
             title="Vulnerability Assessment"
             description="Infrastructure risk scoring for evacuation planning"
             icon="🏗️"
-            href="/dashboard/vulnerability"
+            href="/vulnerability"
           />
           <FeatureCard
             title="Resource Mapping"
             description="Emergency resource locations overlaid with risk zones"
             icon="🚑"
-            href="/dashboard/resources"
+            href="/resources"
           />
         </div>
 

@@ -20,6 +20,7 @@ export default function PortalSelectionPage() {
     { id: 'police-team', name: 'Police Team', route: '/team/police' },
     { id: 'medical-team', name: 'Medical Emergency Team', route: '/team/medical' },
     { id: 'civil-defense', name: 'Civil Defense Team', route: '/team/civil-defense' },
+    { id: 'relief-camp', name: 'Relief Camp Incharge', route: '/team/relief-camp' },
   ];
 
   const handleTeamSelection = (teamRoute: string) => {
