@@ -6,7 +6,7 @@ generator client {
 }
 
 datasource db {
-  provider = "sqlite"
+  provider = "postgresql"
   url      = env("DATABASE_URL")
 }
 
@@ -34,6 +34,13 @@ model Region {
   volunteers    Volunteer[]
   tasks         Task[]
   resources     Resource[]
+  
+  // Multi-user system relations
+  userProfiles  UserProfile[]  @relation("DistrictUsers")
+  incidents     Incident[]     @relation("RegionIncidents")
+  volunteers    Volunteer[]    @relation("VolunteerRegion")
+  tasks         Task[]         @relation("TaskRegion")
+  resources     Resource[]     @relation("ResourceRegion")
   
   createdAt     DateTime @default(now())
   updatedAt     DateTime @updatedAt
@@ -194,7 +201,7 @@ model UserProfile {
   user            User     @relation(fields: [userId], references: [id], onDelete: Cascade)
   
   districtId      String?  // For Collectors and field officers
-  district        Region?  @relation(fields: [districtId], references: [id])
+  district        Region?  @relation("DistrictUsers", fields: [districtId], references: [id])
   
   organization    String?  // NDRF battalion, NGO name
   designation     String?  // Collector, Commandant, etc.
@@ -240,7 +247,7 @@ model Incident {
   location        String          // GeoJSON point { lat, lng }
   address         String?
   regionId        String?
-  region          Region?         @relation(fields: [regionId], references: [id])
+  region          Region?         @relation("RegionIncidents", fields: [regionId], references: [id])
   
   reportedById    String
   reportedBy      User            @relation("ReportedBy", fields: [reportedById], references: [id])
@@ -284,7 +291,7 @@ model Volunteer {
   
   // Location preferences
   preferredRegionId String?
-  preferredRegion   Region?       @relation(fields: [preferredRegionId], references: [id])
+  preferredRegion   Region?       @relation("VolunteerRegion", fields: [preferredRegionId], references: [id])
   
   // Availability
   isAvailable     Boolean         @default(true)
@@ -316,7 +323,7 @@ model Task {
   
   location        String      // GeoJSON point
   regionId        String?
-  region          Region?     @relation(fields: [regionId], references: [id])
+  region          Region?     @relation("TaskRegion", fields: [regionId], references: [id])
   
   assignedToId    String?
   assignedTo      Volunteer?  @relation(fields: [assignedToId], references: [id])
@@ -379,7 +386,7 @@ model Resource {
   
   location        String      // GeoJSON point where resource is available
   regionId        String?
-  region          Region?     @relation(fields: [regionId], references: [id])
+  region          Region?     @relation("ResourceRegion", fields: [regionId], references: [id])
   
   status          String      // 'available', 'allocated', 'delivered'
   allocatedTo     String?     // Incident ID or relief camp ID
