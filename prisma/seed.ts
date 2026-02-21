@@ -91,6 +91,92 @@ const historicalDisasters = [
   },
 ];
 
+async function seedTasksAndRegions() {
+  // Seed regions for tasks
+  const regionKothrud = await prismaClientForSeed.region.upsert({
+    where: { id: 'R12' },
+    update: {},
+    create: {
+      id: 'R12',
+      name: 'Ward 12 - Kothrud',
+      type: 'ward',
+    },
+  });
+  const regionDeccan = await prismaClientForSeed.region.upsert({
+    where: { id: 'R8' },
+    update: {},
+    create: {
+      id: 'R8',
+      name: 'Ward 8 - Deccan',
+      type: 'ward',
+    },
+  });
+  const regionSinhagad = await prismaClientForSeed.region.upsert({
+    where: { id: 'R15' },
+    update: {},
+    create: {
+      id: 'R15',
+      name: 'Ward 15 - Sinhagad Road',
+      type: 'ward',
+    },
+  });
+
+  // Seed tasks
+  await prismaClientForSeed.task.createMany({
+    data: [
+      {
+        id: 'T001',
+        title: 'Flood Rescue Support',
+        description: 'Assist in rescuing people from flooded areas.',
+        status: 'PENDING',
+        type: 'Rescue',
+        location: '{"lat":18.507, "lng":73.807}',
+        regionId: 'R12',
+        requiredSkills: '["Swimming", "First Aid"]',
+        priority: 'urgent',
+        estimatedHours: 4,
+      },
+      {
+        id: 'T002',
+        title: 'Medical Camp Setup',
+        description: 'Set up medical camp for injured residents.',
+        status: 'PENDING',
+        type: 'Medical',
+        location: '{"lat":18.519, "lng":73.855}',
+        regionId: 'R8',
+        requiredSkills: '["Medical", "First Aid"]',
+        priority: 'high',
+        estimatedHours: 6,
+      },
+      {
+        id: 'T003',
+        title: 'Food Distribution',
+        description: 'Distribute food packets at relief camp.',
+        status: 'PENDING',
+        type: 'Relief',
+        location: '{"lat":18.478, "lng":73.858}',
+        regionId: 'R15',
+        requiredSkills: '["Cooking", "Driving"]',
+        priority: 'medium',
+        estimatedHours: 3,
+      },
+      {
+        id: 'T004',
+        title: 'Translation Support',
+        description: 'Help translate for non-local victims.',
+        status: 'PENDING',
+        type: 'Support',
+        location: '{"lat":18.519, "lng":73.855}',
+        regionId: 'R8',
+        requiredSkills: '["Language Translation"]',
+        priority: 'low',
+        estimatedHours: 2,
+      },
+    ],
+    skipDuplicates: true,
+  });
+}
+
 async function main() {
   console.log('🌱 Starting database seed...');
 
@@ -246,6 +332,9 @@ async function main() {
   }
 
   console.log('✅ Created sample infrastructure');
+
+  // Seed task and region data
+  await seedTasksAndRegions();
 
   console.log('\n🎉 Database seeded successfully!');
   console.log(`📊 Summary:`);

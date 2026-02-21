@@ -220,7 +220,7 @@ function MetricCard({
     <div className="bg-white rounded-lg shadow p-6">
       <div className="text-sm text-gray-600 mb-1">{title}</div>
       <div className={`text-3xl font-bold ${colorClasses[color]}`}>{value}</div>
-      <div className="text-xs text-gray-500 mt-1">{subtitle}</div>
+      <div className="text-xs text-gray-700 mt-1">{subtitle}</div>
     </div>
   );
 }
@@ -275,7 +275,7 @@ function ActivityItem({
         </span>
         <span className="text-sm text-gray-900">{title}</span>
       </div>
-      <span className="text-xs text-gray-500">{time}</span>
+      <span className="text-xs text-gray-700">{time}</span>
     </div>
   );
 }

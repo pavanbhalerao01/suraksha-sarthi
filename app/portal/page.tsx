@@ -83,7 +83,7 @@ export default function PortalSelectionPage() {
       description: 'For pre-registered and verified volunteers to receive task assignments',
       icon: Users,
       color: 'green',
-      href: '/volunteer',
+        href: '/volunteer/auth/login',
       features: [
         'Skill-based task matching',
         'Check-in/check-out',
@@ -200,7 +200,7 @@ export default function PortalSelectionPage() {
 
                   {/* Features List */}
                   <div className="space-y-2 mb-6">
-                    <p className="text-xs font-semibold text-gray-500 uppercase">
+                    <p className="text-xs font-semibold text-gray-700 uppercase">
                       Key Features
                     </p>
                     {portal.features.map((feature, idx) => (
