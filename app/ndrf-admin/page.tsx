@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useState } from "react";
+import React, { useState, useEffect } from "react";
 import {
   Eye,
   MessageSquare,
@@ -483,50 +483,41 @@ function DashboardTab() {
 // Prediction Tab Component
 function PredictionTab() {
   const [activeModel, setActiveModel] = useState("all");
+  const [predictions, setPredictions] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
 
-  const predictions = [
-    {
-      id: 1,
-      type: "cyclone",
-      state: "Odisha",
-      district: "Puri",
-      severity: "CRITICAL",
-      confidence: 87.5,
-      date: "2026-02-23",
-      model: "cyclone_predictor_v3",
-      affectedArea: "2,500 km²",
-      affectedPeople: "1.5 Lakh",
-      description:
-        "Deep depression in Bay of Bengal likely to intensify into a severe cyclonic storm.",
-    },
-    {
-      id: 2,
-      type: "flood",
-      state: "Assam",
-      district: "Kaziranga",
-      severity: "HIGH",
-      confidence: 79.3,
-      date: "2026-02-24",
-      model: "flood_predictor_v2",
-      affectedArea: "1,800 km²",
-      affectedPeople: "85,000",
-      description: "Brahmaputra river levels rising due to heavy rainfall.",
-    },
-    {
-      id: 3,
-      type: "earthquake",
-      state: "Gujarat",
-      district: "Kutch",
-      severity: "HIGH",
-      confidence: 65.2,
-      date: "2026-02-25",
-      model: "seismic_predictor_v1",
-      affectedArea: "3,200 km²",
-      affectedPeople: "2.1 Lakh",
-      description:
-        "Seismic activity detected near Kutch fault line. Moderate earthquake possible.",
-    },
-  ];
+  // Fetch predictions from API
+  const fetchPredictions = async () => {
+    try {
+      setLoading(true);
+      setError(null);
+      
+      const response = await fetch('/api/predictions');
+      const data = await response.json();
+      
+      if (data.fallback) {
+        setError(data.error);
+      }
+      
+      setPredictions(data.predictions || []);
+    } catch (err) {
+      setError('Failed to load predictions. Please ensure the backend server is running.');
+      console.error('Error fetching predictions:', err);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // Fetch on mount and set up polling
+  React.useEffect(() => {
+    fetchPredictions();
+    
+    // Refresh predictions every 5 minutes
+    const interval = setInterval(fetchPredictions, 5 * 60 * 1000);
+    
+    return () => clearInterval(interval);
+  }, []);
 
   const models = [
     { id: "all", label: "All Models" },
@@ -571,68 +562,119 @@ function PredictionTab() {
         ))}
       </div>
 
+      {/* Error message */}
+      {error && (
+        <div className="bg-red-50 border border-red-200 rounded-lg p-4">
+          <div className="flex items-start gap-3">
+            <AlertTriangle className="w-5 h-5 text-red-600 flex-shrink-0 mt-0.5" />
+            <div>
+              <p className="text-sm text-red-800 font-medium">Backend Service Unavailable</p>
+              <p className="text-sm text-red-700 mt-1">{error}</p>
+              <p className="text-xs text-red-600 mt-2">
+                Please run: <code className="bg-red-100 px-2 py-0.5 rounded">cd backend && python main.py</code>
+              </p>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Loading state */}
+      {loading && !error && (
+        <div className="flex items-center justify-center py-12">
+          <div className="text-center">
+            <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto mb-4"></div>
+            <p className="text-gray-600">
+              {activeModel === "all" 
+                ? "Loading disaster predictions..." 
+                : `Loading ${activeModel} predictions...`}
+            </p>
+          </div>
+        </div>
+      )}
+
       {/* Predictions list */}
-      <div className="space-y-4">
-        {filtered.map((p) => (
-          <div
-            key={p.id}
-            className="bg-gray-50 p-5 rounded-lg border border-gray-200"
-          >
-            <div className="flex items-start gap-4">
-              <span className="text-3xl">{getDisasterIcon(p.type)}</span>
-              <div className="flex-1">
-                <div className="flex items-center gap-2 flex-wrap mb-2">
-                  <span className="font-semibold text-gray-900 text-lg capitalize">
-                    {p.type}
-                  </span>
-                  <span
-                    className={cn(
-                      "text-xs px-2 py-1 rounded border font-medium",
-                      getSeverityColor(p.severity)
-                    )}
-                  >
-                    {p.severity}
-                  </span>
-                </div>
-                <div className="text-sm text-gray-600 mb-2">
-                  <MapPin className="w-3 h-3 inline mr-1" />
-                  {p.district}, {p.state}
-                </div>
-                <p className="text-sm text-gray-700 mb-3">{p.description}</p>
-                <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-3">
-                  <div className="bg-white p-2 rounded border border-gray-200">
-                    <div className="text-xs text-gray-500">Confidence</div>
-                    <div className="text-sm font-bold text-green-600">
-                      {p.confidence}%
+      {!loading && !error && filtered.length === 0 && (
+        <div className="bg-blue-50 border border-blue-200 rounded-lg p-8 text-center">
+          <Info className="w-12 h-12 text-blue-400 mx-auto mb-3" />
+          <p className="text-blue-900 font-medium mb-2">
+            {activeModel === "all" 
+              ? "No Risks Detected" 
+              : `No ${activeModel.charAt(0).toUpperCase() + activeModel.slice(1)} Risk Detected`}
+          </p>
+          <p className="text-blue-700 text-sm">
+            {activeModel === "all" 
+              ? "All monitored locations are safe. No disaster risks detected at this time." 
+              : `No ${activeModel} risk detected in monitored areas.`}
+          </p>
+          <p className="text-blue-600 text-xs mt-3">
+            System monitors real-time data. Predictions appear only when actual risk exists.
+          </p>
+        </div>
+      )}
+
+      {!loading && filtered.length > 0 && (
+        <div className="space-y-4">
+          {filtered.map((p) => (
+            <div
+              key={p.id}
+              className="bg-gray-50 p-5 rounded-lg border border-gray-200"
+            >
+              <div className="flex items-start gap-4">
+                <span className="text-3xl">{getDisasterIcon(p.type)}</span>
+                <div className="flex-1">
+                  <div className="flex items-center gap-2 flex-wrap mb-2">
+                    <span className="font-semibold text-gray-900 text-lg capitalize">
+                      {p.type}
+                    </span>
+                    <span
+                      className={cn(
+                        "text-xs px-2 py-1 rounded border font-medium",
+                        getSeverityColor(p.severity)
+                      )}
+                    >
+                      {p.severity}
+                    </span>
+                  </div>
+                  <div className="text-sm text-gray-600 mb-2">
+                    <MapPin className="w-3 h-3 inline mr-1" />
+                    {p.location && `${p.location}, `}{p.district}, {p.state}
+                  </div>
+                  <p className="text-sm text-gray-700 mb-3">{p.description}</p>
+                  <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-3">
+                    <div className="bg-white p-2 rounded border border-gray-200">
+                      <div className="text-xs text-gray-500">Confidence</div>
+                      <div className="text-sm font-bold text-green-600">
+                        {p.confidence}%
+                      </div>
+                    </div>
+                    <div className="bg-white p-2 rounded border border-gray-200">
+                      <div className="text-xs text-gray-500">Date</div>
+                      <div className="text-sm font-bold text-gray-900">
+                        {p.date}
+                      </div>
+                    </div>
+                    <div className="bg-white p-2 rounded border border-gray-200">
+                      <div className="text-xs text-gray-500">Affected Area</div>
+                      <div className="text-sm font-bold text-gray-900">
+                        {p.affectedArea}
+                      </div>
+                    </div>
+                    <div className="bg-white p-2 rounded border border-gray-200">
+                      <div className="text-xs text-gray-500">People at Risk</div>
+                      <div className="text-sm font-bold text-gray-900">
+                        {p.affectedPeople}
+                      </div>
                     </div>
                   </div>
-                  <div className="bg-white p-2 rounded border border-gray-200">
-                    <div className="text-xs text-gray-500">Date</div>
-                    <div className="text-sm font-bold text-gray-900">
-                      {p.date}
-                    </div>
+                  <div className="text-xs text-gray-500 font-mono">
+                    Model: {p.model}
                   </div>
-                  <div className="bg-white p-2 rounded border border-gray-200">
-                    <div className="text-xs text-gray-500">Affected Area</div>
-                    <div className="text-sm font-bold text-gray-900">
-                      {p.affectedArea}
-                    </div>
-                  </div>
-                  <div className="bg-white p-2 rounded border border-gray-200">
-                    <div className="text-xs text-gray-500">People at Risk</div>
-                    <div className="text-sm font-bold text-gray-900">
-                      {p.affectedPeople}
-                    </div>
-                  </div>
-                </div>
-                <div className="text-xs text-gray-500 font-mono">
-                  Model: {p.model}
                 </div>
               </div>
             </div>
-          </div>
-        ))}
-      </div>
+          ))}
+        </div>
+      )}
     </div>
   );
 }

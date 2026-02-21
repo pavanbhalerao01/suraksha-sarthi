@@ -1,0 +1,33 @@
+# Suraksha Sathi NDRF Backend Dependencies
+
+# Core Framework
+fastapi==0.104.1
+uvicorn[standard]==0.24.0
+
+# Data Processing
+numpy==1.26.2
+pandas==2.1.4
+
+# HTTP & APIs
+requests==2.31.0
+httpx==0.25.2
+
+# Environment
+python-dotenv==1.0.0
+
+# Validation
+pydantic==2.5.0
+
+# Background Scheduling
+apscheduler==3.10.4
+
+# CORS
+python-multipart==0.0.6
+
+# Optional: Database (if needed later)
+# sqlalchemy==2.0.23
+# psycopg2-binary==2.9.9
+
+# Optional: Testing
+# pytest==7.4.3
+# pytest-asyncio==0.21.1
