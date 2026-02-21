@@ -827,6 +827,58 @@ function TasksTab() {
 // SOS Tab Component
 function SOSTab() {
   const [filter, setFilter] = useState("ALL");
+  const [sendingSOSId, setSendingSOSId] = useState<string | null>(null);
+  const [showSOSModal, setShowSOSModal] = useState(false);
+  const [selectedSOS, setSelectedSOS] = useState<any>(null);
+  const [sosResponse, setSOSResponse] = useState<any>(null);
+
+  // Function to send SOS to all volunteers
+  const handleSendSOS = async (sos: any) => {
+    setSelectedSOS(sos);
+    setShowSOSModal(true);
+  };
+
+  const confirmSendSOS = async () => {
+    if (!selectedSOS) return;
+    
+    setSendingSOSId(selectedSOS.id);
+    setSOSResponse(null);
+    
+    try {
+      const response = await fetch("/api/sos-alert", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          incidentId: selectedSOS.id,
+          disasterType: selectedSOS.disasterType,
+          title: selectedSOS.title,
+          description: selectedSOS.description,
+          severity: selectedSOS.severity,
+          location: { lat: 20.2961, lng: 85.8245 }, // Default coordinates from address
+          address: selectedSOS.address,
+          reporterName: selectedSOS.reporter,
+          reporterPhone: selectedSOS.phone,
+          sentBy: "NDRF_ADMIN"
+        })
+      });
+      
+      const data = await response.json();
+      
+      if (data.success) {
+        setSOSResponse(data.data);
+        // Keep modal open to show success message
+      } else {
+        alert("Failed to send SOS: " + data.error);
+        setShowSOSModal(false);
+      }
+    } catch (error) {
+      console.error("Error sending SOS:", error);
+      alert("Failed to send SOS alert. Please try again.");
+      setShowSOSModal(false);
+    } finally {
+      setSendingSOSId(null);
+    }
+  };
 
   const sosList = [
     {
@@ -1016,12 +1068,23 @@ function SOSTab() {
                     </div>
                   </div>
                 </div>
-                <div className="flex gap-2">
+                <div className="flex gap-2 flex-wrap">
                   <button className="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition text-sm font-medium">
                     ✅ Verify
                   </button>
                   <button className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition text-sm font-medium">
                     🚁 Dispatch Team
+                  </button>
+                  <button 
+                    onClick={() => handleSendSOS(sos)}
+                    disabled={sendingSOSId === sos.id}
+                    className="px-4 py-2 bg-orange-600 text-white rounded-lg hover:bg-orange-700 transition text-sm font-medium disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
+                  >
+                    {sendingSOSId === sos.id ? (
+                      <>⏳ Sending...</>
+                    ) : (
+                      <>📢 Alert Volunteers</>
+                    )}
                   </button>
                   <button className="px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition text-sm font-medium">
                     ⛔ Mark as False
@@ -1032,6 +1095,185 @@ function SOSTab() {
           </div>
         ))}
       </div>
+
+      {/* SOS Alert Confirmation Modal */}
+      {showSOSModal && selectedSOS && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-xl shadow-2xl max-w-2xl w-full max-h-[90vh] overflow-y-auto">
+            <div className="bg-gradient-to-r from-orange-600 to-red-600 text-white p-6 rounded-t-xl">
+              <h3 className="text-2xl font-bold flex items-center gap-2">
+                <Radio className="w-6 h-6 animate-pulse" />
+                Alert All Volunteers
+              </h3>
+              <p className="text-orange-100 mt-1">Send SOS broadcast to available volunteers</p>
+            </div>
+            
+            {!sosResponse ? (
+              <div className="p-6 space-y-4">
+                <div className="bg-amber-50 border border-amber-200 rounded-lg p-4">
+                  <p className="text-sm text-amber-800 flex items-start gap-2">
+                    <AlertTriangle className="w-5 h-5 flex-shrink-0 mt-0.5" />
+                    <span>
+                      This will send an <strong>emergency SOS alert</strong> to all verified and available volunteers. 
+                      The alert will include disaster details, victim location, and required skills.
+                    </span>
+                  </p>
+                </div>
+
+                <div className="space-y-3">
+                  <h4 className="font-semibold text-gray-900 flex items-center gap-2">
+                    <Info className="w-4 h-4" />
+                    Incident Details
+                  </h4>
+                  
+                  <div className="grid grid-cols-2 gap-3">
+                    <div className="bg-gray-50 p-3 rounded-lg">
+                      <div className="text-xs text-gray-500 mb-1">Disaster Type</div>
+                      <div className="font-medium text-gray-900 flex items-center gap-1">
+                        {getDisasterIcon(selectedSOS.disasterType)} {selectedSOS.disasterType}
+                      </div>
+                    </div>
+                    <div className="bg-gray-50 p-3 rounded-lg">
+                      <div className="text-xs text-gray-500 mb-1">Severity</div>
+                      <div className={cn("font-medium inline-block px-2 py-1 rounded text-sm", getSeverityColor(selectedSOS.severity))}>
+                        {selectedSOS.severity}
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="bg-gray-50 p-3 rounded-lg">
+                    <div className="text-xs text-gray-500 mb-1">Incident</div>
+                    <div className="font-medium text-gray-900">{selectedSOS.title}</div>
+                    <div className="text-sm text-gray-600 mt-1">{selectedSOS.description}</div>
+                  </div>
+
+                  <div className="bg-gray-50 p-3 rounded-lg">
+                    <div className="text-xs text-gray-500 mb-1">
+                      <MapPin className="w-3 h-3 inline" /> Location
+                    </div>
+                    <div className="font-medium text-gray-900">{selectedSOS.address}</div>
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-3">
+                    <div className="bg-gray-50 p-3 rounded-lg">
+                      <div className="text-xs text-gray-500 mb-1">
+                        <User className="w-3 h-3 inline" /> Reporter
+                      </div>
+                      <div className="font-medium text-gray-900">{selectedSOS.reporter}</div>
+                    </div>
+                    <div className="bg-gray-50 p-3 rounded-lg">
+                      <div className="text-xs text-gray-500 mb-1">
+                        <Phone className="w-3 h-3 inline" /> Contact
+                      </div>
+                      <div className="font-medium text-gray-900">{selectedSOS.phone}</div>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
+                  <h5 className="font-semibold text-blue-900 mb-2">📋 Volunteers Will Receive:</h5>
+                  <ul className="text-sm text-blue-800 space-y-1">
+                    <li>✓ Disaster type and severity level</li>
+                    <li>✓ Exact location with GPS coordinates</li>
+                    <li>✓ Reporter contact details</li>
+                    <li>✓ Required skills (auto-matched based on disaster type)</li>
+                    <li>✓ Immediate action instructions</li>
+                  </ul>
+                </div>
+
+                <div className="flex justify-end gap-3 pt-4 border-t">
+                  <button
+                    onClick={() => {
+                      setShowSOSModal(false);
+                      setSelectedSOS(null);
+                    }}
+                    className="px-6 py-2 border border-gray-300 rounded-lg hover:bg-gray-50 transition font-medium"
+                    disabled={sendingSOSId !== null}
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    onClick={confirmSendSOS}
+                    disabled={sendingSOSId !== null}
+                    className="px-6 py-2 bg-orange-600 text-white rounded-lg hover:bg-orange-700 transition font-medium disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
+                  >
+                    {sendingSOSId ? (
+                      <>
+                        <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                        Sending SOS...
+                      </>
+                    ) : (
+                      <>
+                        <Radio className="w-4 h-4" />
+                        Confirm & Send SOS
+                      </>
+                    )}
+                  </button>
+                </div>
+              </div>
+            ) : (
+              <div className="p-6 space-y-4">
+                <div className="text-center py-6">
+                  <div className="w-16 h-16 bg-green-100 rounded-full flex items-center justify-center mx-auto mb-4">
+                    <CheckCircle2 className="w-10 h-10 text-green-600" />
+                  </div>
+                  <h4 className="text-2xl font-bold text-gray-900 mb-2">SOS Alert Sent Successfully!</h4>
+                  <p className="text-gray-600">Volunteers have been notified and are en route.</p>
+                </div>
+
+                <div className="bg-green-50 border border-green-200 rounded-lg p-4">
+                  <h5 className="font-semibold text-green-900 mb-3 flex items-center gap-2">
+                    <Users className="w-5 h-5" />
+                    Alert Summary
+                  </h5>
+                  <div className="grid grid-cols-2 gap-4">
+                    <div>
+                      <div className="text-sm text-green-600">Volunteers Notified</div>
+                      <div className="text-2xl font-bold text-green-900">{sosResponse.totalVolunteersNotified}</div>
+                    </div>
+                    <div>
+                      <div className="text-sm text-green-600">Required Skills</div>
+                      <div className="text-sm font-medium text-green-900 mt-1">
+                        {sosResponse.requiredSkills?.join(", ") || "General assistance"}
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                {sosResponse.notifications && sosResponse.notifications.length > 0 && (
+                  <div className="bg-gray-50 border border-gray-200 rounded-lg p-4 max-h-60 overflow-y-auto">
+                    <h5 className="font-semibold text-gray-900 mb-3">Sample Notifications (First 5)</h5>
+                    <div className="space-y-2">
+                      {sosResponse.notifications.map((notif: any, idx: number) => (
+                        <div key={idx} className="bg-white p-3 rounded border border-gray-200 text-sm">
+                          <div className="font-medium text-gray-900">{notif.volunteerName}</div>
+                          <div className="text-xs text-gray-500">{notif.volunteerPhone}</div>
+                          <div className="text-xs text-blue-600 mt-1">
+                            Skills: {notif.volunteerSkills?.join(", ") || "None listed"}
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                <div className="flex justify-end pt-4 border-t">
+                  <button
+                    onClick={() => {
+                      setShowSOSModal(false);
+                      setSelectedSOS(null);
+                      setSOSResponse(null);
+                    }}
+                    className="px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition font-medium"
+                  >
+                    Close
+                  </button>
+                </div>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
     </div>
   );
 }

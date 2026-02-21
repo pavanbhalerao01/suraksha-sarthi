@@ -29,11 +29,6 @@ model Region {
   riskScores    RiskScore[]
   disasters     Disaster[]
   infrastructure Infrastructure[]
-  userProfiles  UserProfile[]
-  incidents     Incident[]
-  volunteers    Volunteer[]
-  tasks         Task[]
-  resources     Resource[]
   
   // Multi-user system relations
   userProfiles  UserProfile[]  @relation("DistrictUsers")
@@ -399,5 +394,47 @@ model Resource {
   @@index([ngoId])
   @@index([status])
   @@index([regionId])
+}
+
+// SOS Alerts sent to volunteers
+model SosAlert {
+  id                String      @id @default(cuid())
+  
+  // Incident details
+  incidentId        String      // Reference to the disaster/incident
+  disasterType      String      // 'flood', 'fire', 'building_collapse', etc.
+  title             String
+  description       String
+  severity          String      // 'low', 'medium', 'high', 'critical'
+  
+  // Location details
+  location          String      // GeoJSON point { lat, lng }
+  address           String
+  
+  // Complainant/Reporter details
+  reporterName      String
+  reporterPhone     String
+  
+  // Required skills for this disaster
+  requiredSkills    String      // JSON array: ["diver", "swimmer", "boat_operator"]
+  
+  // Alert metadata
+  sentBy            String      // Admin user ID who triggered the SOS
+  sentAt            DateTime    @default(now())
+  
+  // Volunteers notified (stored as JSON array of volunteer IDs)
+  volunteersNotified String     // ["vol-id-1", "vol-id-2", "vol-id-3"]
+  totalVolunteersNotified Int   @default(0)
+  
+  // Response tracking
+  volunteersResponded  String?  // JSON array of volunteer IDs who responded
+  totalVolunteersResponded Int  @default(0)
+  
+  createdAt         DateTime    @default(now())
+  updatedAt         DateTime    @updatedAt
+  
+  @@index([incidentId])
+  @@index([sentAt])
+  @@index([disasterType])
 }
 
