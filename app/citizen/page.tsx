@@ -1,6 +1,7 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect, dynamic as _dynamic } from "react";
+import dynamic from "next/dynamic";
 import Link from "next/link";
 import { 
   AlertCircle, 
@@ -13,12 +14,101 @@ import {
   Clock,
   Shield,
   Navigation,
-  Upload
+  Upload,
+  Building2,
+  ChevronRight,
+  Activity,
 } from "lucide-react";
+import type { Disaster } from "@/components/maps/HospitalFinderMap";
+
+// Dynamic import — Leaflet must not SSR
+const HospitalFinderMap = dynamic(
+  () => import("@/components/maps/HospitalFinderMap"),
+  { ssr: false, loading: () => <div className="h-[480px] bg-gray-100 animate-pulse rounded-xl flex items-center justify-center text-gray-400">Loading map…</div> },
+);
+
+// ─────────────────────────────────────────────────────────
+//  Demo SOS disasters across Maharashtra
+// ─────────────────────────────────────────────────────────
+const DEMO_DISASTERS: Disaster[] = [
+  {
+    id: "sos-001",
+    type: "flood",
+    title: "Flash Flood — Sinhagad Road",
+    location: "Sinhagad Road, Pune",
+    lat: 18.4829,
+    lng: 73.8137,
+    severity: "CRITICAL",
+    date: "2026-02-22 14:30",
+    description: "Severe waterlogging reported. Multiple residents stranded on rooftops.",
+  },
+  {
+    id: "sos-002",
+    type: "landslide",
+    title: "Landslide — Lonavala Ghats",
+    location: "Old Mumbai–Pune Highway, Lonavala",
+    lat: 18.7525,
+    lng: 73.4070,
+    severity: "HIGH",
+    date: "2026-02-22 12:10",
+    description: "Road blocked near Khandala. 3 vehicles trapped.",
+  },
+  {
+    id: "sos-003",
+    type: "cyclone",
+    title: "Cyclone Impact — Ratnagiri Coast",
+    location: "Ratnagiri, Konkan",
+    lat: 16.9944,
+    lng: 73.3000,
+    severity: "CRITICAL",
+    date: "2026-02-22 08:00",
+    description: "Strong winds and storm surge. Coastal villages evacuated.",
+  },
+  {
+    id: "sos-004",
+    type: "flood",
+    title: "Urban Flooding — Dadar",
+    location: "Dadar TT, Mumbai",
+    lat: 19.0176,
+    lng: 72.8432,
+    severity: "HIGH",
+    date: "2026-02-22 16:45",
+    description: "Knee-deep water on streets. Traffic at standstill.",
+  },
+  {
+    id: "sos-005",
+    type: "heatwave",
+    title: "Heatwave Alert — Nagpur",
+    location: "Civil Lines, Nagpur",
+    lat: 21.1458,
+    lng: 79.0882,
+    severity: "HIGH",
+    date: "2026-02-22 13:00",
+    description: "Temperature exceeding 46°C. Multiple heat-stroke cases.",
+  },
+];
+
+const SEVERITY_STYLES: Record<string, string> = {
+  CRITICAL: "bg-red-100 text-red-700 border-red-300",
+  HIGH: "bg-orange-100 text-orange-700 border-orange-300",
+  MEDIUM: "bg-yellow-100 text-yellow-700 border-yellow-300",
+  LOW: "bg-green-100 text-green-700 border-green-300",
+};
+
+const TYPE_ICONS: Record<string, string> = {
+  flood: "🌊",
+  cyclone: "🌀",
+  landslide: "⛰️",
+  heatwave: "🔥",
+  earthquake: "🏚️",
+  fire: "🔥",
+};
 
 export default function CitizenPortal() {
   const [sosActive, setSosActive] = useState(false);
   const [showReportForm, setShowReportForm] = useState(false);
+  const [activeTab, setActiveTab] = useState<"sos" | "hospitals">("sos");
+  const [selectedDisaster, setSelectedDisaster] = useState<Disaster | null>(null);
 
   const handleSOS = () => {
     setSosActive(true);
@@ -49,7 +139,37 @@ export default function CitizenPortal() {
         </div>
       </header>
 
-      <div className="max-w-4xl mx-auto px-4 py-6">
+      <div className={activeTab === "hospitals" ? "max-w-7xl mx-auto px-4 py-6" : "max-w-4xl mx-auto px-4 py-6"}>
+
+        {/* ─── Tab Navigation ─── */}
+        <div className="bg-white rounded-xl shadow-sm border border-gray-200 mb-6 p-1 flex gap-1">
+          <button
+            onClick={() => setActiveTab("sos")}
+            className={`flex-1 flex items-center justify-center gap-2 py-3 rounded-lg font-semibold text-sm transition-all ${
+              activeTab === "sos"
+                ? "bg-red-600 text-white shadow-md"
+                : "text-gray-600 hover:bg-gray-100"
+            }`}
+          >
+            <AlertCircle className="w-4 h-4" />
+            SOS &amp; Reports
+          </button>
+          <button
+            onClick={() => setActiveTab("hospitals")}
+            className={`flex-1 flex items-center justify-center gap-2 py-3 rounded-lg font-semibold text-sm transition-all ${
+              activeTab === "hospitals"
+                ? "bg-emerald-600 text-white shadow-md"
+                : "text-gray-600 hover:bg-gray-100"
+            }`}
+          >
+            <Building2 className="w-4 h-4" />
+            Nearest Hospitals
+          </button>
+        </div>
+
+        {/* ━━━━━━━━━━━━  SOS TAB  ━━━━━━━━━━━━ */}
+        {activeTab === "sos" && (
+        <>
         {/* SOS Button - Most Prominent */}
         <div className="bg-gradient-to-br from-red-600 to-red-700 p-8 rounded-2xl shadow-2xl mb-6 text-white">
           <div className="text-center">
@@ -279,6 +399,104 @@ export default function CitizenPortal() {
             </div>
           </div>
         </div>
+        </>
+        )}
+
+        {/* ━━━━━━━━━━━━  HOSPITALS TAB  ━━━━━━━━━━━━ */}
+        {activeTab === "hospitals" && (
+          <div className="space-y-5">
+            {/* Header */}
+            <div className="bg-gradient-to-r from-emerald-600 to-teal-600 rounded-2xl p-6 text-white shadow-lg">
+              <div className="flex items-center gap-3 mb-2">
+                <Building2 className="w-7 h-7" />
+                <h2 className="text-2xl font-bold">Nearest Hospitals — Maharashtra</h2>
+              </div>
+              <p className="text-emerald-100 text-sm">
+                Click on any disaster / SOS below to see the 5 nearest hospitals and the shortest route on the map. Zoom in to see wards, streets and landmarks.
+              </p>
+            </div>
+
+            <div className="grid grid-cols-1 lg:grid-cols-4 gap-5">
+              {/* ── Disaster sidebar ── */}
+              <div className="lg:col-span-1 space-y-3">
+                <h3 className="font-semibold text-gray-900 text-sm flex items-center gap-1.5">
+                  <Activity className="w-4 h-4 text-red-500" />
+                  Active SOS / Disasters
+                  <span className="ml-auto text-xs bg-red-100 text-red-700 border border-red-200 rounded-full px-2 py-0.5">
+                    {DEMO_DISASTERS.length}
+                  </span>
+                </h3>
+
+                {DEMO_DISASTERS.map((d) => {
+                  const isSelected = selectedDisaster?.id === d.id;
+                  return (
+                    <button
+                      key={d.id}
+                      onClick={() => setSelectedDisaster(d)}
+                      className={`w-full text-left p-3.5 rounded-xl border-2 transition-all group ${
+                        isSelected
+                          ? "bg-emerald-50 border-emerald-400 shadow-md"
+                          : "bg-white border-gray-200 hover:border-emerald-300 hover:shadow-sm"
+                      }`}
+                    >
+                      <div className="flex items-start gap-2">
+                        <span className="text-lg mt-0.5">{TYPE_ICONS[d.type] || "⚠️"}</span>
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-center gap-1.5 mb-1 flex-wrap">
+                            <span className="font-semibold text-gray-900 text-sm leading-tight">
+                              {d.title}
+                            </span>
+                          </div>
+                          <span
+                            className={`inline-block text-[10px] font-bold uppercase px-1.5 py-0.5 rounded border mb-1 ${
+                              SEVERITY_STYLES[d.severity] || SEVERITY_STYLES.MEDIUM
+                            }`}
+                          >
+                            {d.severity}
+                          </span>
+                          <div className="text-xs text-gray-500 flex items-center gap-1 mt-0.5">
+                            <MapPin className="w-3 h-3 flex-shrink-0" />
+                            <span className="truncate">{d.location}</span>
+                          </div>
+                        </div>
+                        <ChevronRight
+                          className={`w-4 h-4 flex-shrink-0 mt-1 transition ${
+                            isSelected ? "text-emerald-600" : "text-gray-300 group-hover:text-gray-500"
+                          }`}
+                        />
+                      </div>
+                    </button>
+                  );
+                })}
+
+                {/* Helpful legend */}
+                <div className="bg-gray-50 rounded-lg p-3 border border-gray-200 text-[11px] text-gray-500 space-y-1.5 mt-2">
+                  <p className="font-semibold text-gray-700 text-xs mb-1">Map Legend</p>
+                  <p>🚨 Red pulse = Victim / SOS location</p>
+                  <p>🏥 Hospital markers (color-coded)</p>
+                  <p>━ Solid green line = Nearest hospital route</p>
+                  <p>┅ Dashed lines = Alternative hospital routes</p>
+                </div>
+              </div>
+
+              {/* ── Map + hospital cards ── */}
+              <div className="lg:col-span-3">
+                {!selectedDisaster ? (
+                  <div className="bg-white border-2 border-dashed border-gray-300 rounded-2xl flex flex-col items-center justify-center text-center p-16 min-h-[480px]">
+                    <Building2 className="w-16 h-16 text-gray-300 mb-4" />
+                    <h3 className="text-lg font-semibold text-gray-700 mb-2">Select a Disaster</h3>
+                    <p className="text-gray-500 text-sm max-w-md">
+                      Click any SOS incident from the list on the left. The map will show the victim&apos;s location and route to the 5 nearest hospitals.
+                    </p>
+                  </div>
+                ) : (
+                  <HospitalFinderMap selectedDisaster={selectedDisaster} />
+                )}
+              </div>
+            </div>
+          </div>
+        )}
+
       </div>
     </div>
   );

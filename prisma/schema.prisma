@@ -481,3 +481,25 @@ model SosAlert {
   @@index([disasterType])
 }
 
+// ML Predictions stored from Python backend
+model MLPrediction {
+  id             String   @id @default(cuid())
+  type           String   // 'cyclone', 'flood', 'heatwave'
+  state          String
+  district       String
+  severity       String   // 'LOW', 'MEDIUM', 'HIGH', 'CRITICAL'
+  confidence     Float    // 0-100
+  predictedDate  String
+  affectedArea   String?
+  affectedPeople String?
+  description    String?
+  model          String?  // ML model name used
+  lat            Float?
+  lon            Float?
+  fetchedAt      DateTime @default(now())
+
+  @@index([type])
+  @@index([severity])
+  @@index([fetchedAt])
+}
+

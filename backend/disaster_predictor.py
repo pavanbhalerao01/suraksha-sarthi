@@ -465,129 +465,6 @@ class DisasterPredictor:
         
         return forecast
     
-    def predict_forest_fire_risk(self, city_data: Dict, weather_data: Optional[Dict]) -> Optional[Dict]:
-        """
-        Predict forest fire risk based on weather conditions
-        Real indicators: temperature, humidity, wind speed, rainfall deficit
-        Uses authentic meteorological fire danger criteria
-        """
-        if not weather_data:
-            return None
-        
-        # Check if city/region has forest areas
-        if "forest_fire" not in city_data.get("vulnerable_to", []):
-            return None
-        
-        temperature = weather_data.get("temperature", 0)  # Celsius
-        humidity = weather_data.get("humidity", 0)  # %
-        wind_speed = weather_data.get("wind_speed", 0)  # m/s
-        rainfall_1h = weather_data.get("rainfall_1h", 0)
-        rainfall_3h = weather_data.get("rainfall_3h", 0)
-        clouds = weather_data.get("clouds", 0)
-        
-        # Estimate days since rain (simplified - in production use actual rainfall history)
-        days_since_rain = 0
-        if rainfall_1h == 0 and rainfall_3h == 0:
-            # Estimate based on cloud cover and season
-            if clouds < 20:
-                days_since_rain = 15  # Clear skies suggest dry period
-            elif clouds < 50:
-                days_since_rain = 7
-            else:
-                days_since_rain = 3
-        
-        severity = None
-        confidence = 0
-        description = ""
-        
-        # Forest Fire Danger Criteria (IMD/FSI standards):
-        # HIGH: Temp >35°C, Humidity <30%, Wind >15 km/h, No rain >14 days
-        # MODERATE: Temp >30°C, Humidity <40%, Wind >10 km/h, No rain >7 days
-        # LOW: Temp >25°C, Humidity <50%, Dry conditions
-        
-        wind_kmh = wind_speed * 3.6  # Convert m/s to km/h
-        
-        # Fire Weather Index calculation (simplified)
-        fire_danger_index = (temperature / 50) * ((100 - humidity) / 100) * (wind_kmh / 30)
-        fire_danger_index *= (1 + days_since_rain / 30)
-        
-        if temperature >= 40 and humidity < 20 and days_since_rain > 21:
-            severity = "CRITICAL"
-            confidence = 90
-            description = f"Extreme fire danger: {temperature}°C, {humidity}% humidity, {days_since_rain} days dry"
-        elif temperature >= 37 and humidity < 25 and days_since_rain > 14:
-            severity = "HIGH"
-            confidence = 80
-            description = f"High fire risk: Hot, dry conditions. {temperature}°C, {humidity}% humidity"
-        elif temperature >= 33 and humidity < 30 and wind_kmh > 15:
-            severity = "MODERATE"
-            confidence = 70
-            description = f"Moderate fire risk: {temperature}°C, low humidity, winds {wind_kmh:.0f} km/h"
-        elif temperature >= 30 and humidity < 40 and days_since_rain > 7:
-            severity = "MODERATE"
-            confidence = 60
-            description = f"Moderate fire risk: Warm and dry for {days_since_rain} days"
-        elif temperature >= 25 and humidity < 50 and days_since_rain > 5:
-            severity = "LOW"
-            confidence = 50
-            description = f"Low fire risk: Dry conditions, monitor forest areas"
-        elif temperature >= 20 and humidity < 60:
-            severity = "LOW"
-            confidence = 40
-            description = "Low fire risk: Dry season monitoring active"
-        else:
-            return None  # No fire risk
-        
-        # Generate 7-day forecast based on fire danger
-        forecast_7day = self._generate_forest_fire_forecast(fire_danger_index, severity)
-        peak_day_index = forecast_7day.index(max(forecast_7day))
-        peak_date = (datetime.now() + timedelta(days=peak_day_index + 1)).strftime("%Y-%m-%d")
-        
-        return {
-            "id": f"FF-{city_data['name'].replace(' ', '-').upper()}-{datetime.now().strftime('%Y%m%d%H%M')}",
-            "type": "forest_fire",
-            "severity": severity,
-            "confidence": confidence,
-            "location": city_data["name"],
-            "state": city_data["state"],
-            "district": city_data["district"],
-            "description": description,
-            "date": peak_date,
-            "affectedArea": f"{random.randint(50, 300)} hectares",
-            "affectedPeople": f"{random.randint(5, 50)}K",
-            "model": "ForestFire-Detector-v1.0",
-            "forecast_7day": forecast_7day,
-            "forecast_dates": self._generate_forecast_dates(),
-            "real_data": {
-                "temperature_celsius": temperature,
-                "humidity_percent": humidity,
-                "wind_speed_kmh": round(wind_speed * 3.6, 1),
-                "fire_danger_index": round(fire_danger_index, 2),
-                "days_since_rain": days_since_rain
-            }
-        }
-    
-    def _generate_forest_fire_forecast(self, current_fdi: float, severity: str) -> List[int]:
-        """Generate 7-day forest fire risk forecast (0-100 scale)"""
-        forecast = []
-        intensity = 40 if severity == "LOW" else 60 if severity == "MODERATE" else 80 if severity == "HIGH" else 95
-        
-        # Fire risk evolution (typically increases during dry spell, decreases with rain)
-        for day in range(self.forecast_days):
-            if day <= 4:  # Fire risk may persist or increase
-                daily_change = np.random.uniform(-8, 10)
-                # Simulate occasional rainfall reducing risk
-                if random.random() < 0.15:  # 15% chance of rain each day
-                    daily_change = np.random.uniform(-25, -10)
-                intensity = min(100, max(25, intensity + daily_change))
-            else:  # Risk typically moderates
-                daily_change = np.random.uniform(-12, 5)
-                intensity = max(20, intensity + daily_change)
-            
-            forecast.append(int(intensity))
-        
-        return forecast
-    
     def predict_all_disasters(self, city_data: Dict, weather_data: Optional[Dict]) -> List[Dict]:
         """
         Check all disaster types for a given city
@@ -616,10 +493,6 @@ class DisasterPredictor:
         if heatwave:
             predictions.append(heatwave)
         
-        forest_fire = self.predict_forest_fire_risk(city_data, weather_data)
-        if forest_fire:
-            predictions.append(forest_fire)
-        
         return predictions
     
     def get_model_stats(self) -> Dict:
@@ -627,6 +500,6 @@ class DisasterPredictor:
         return {
             "version": self.model_version,
             "models_loaded": self.models_loaded,
-            "supported_disasters": ["cyclone", "flood", "earthquake", "landslide", "heatwave", "forest_fire"],
+            "supported_disasters": ["cyclone", "flood", "earthquake", "landslide", "heatwave"],
             "status": "operational" if self.models_loaded else "initializing"
         }
