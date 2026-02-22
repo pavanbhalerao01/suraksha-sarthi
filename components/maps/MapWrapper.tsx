@@ -118,7 +118,7 @@ export default function MapWrapper({ data }: MapWrapperProps) {
                 <div class="space-y-1">
                   ${Object.entries(region.factors).map(([factor, value]) => `
                     <div class="flex justify-between text-xs">
-                      <span class="text-gray-500 capitalize">
+                      <span class="text-gray-700 capitalize">
                         ${factor.replace(/_/g, ' ')}:
                       </span>
                       <span class="font-medium">${((value || 0) * 100).toFixed(0)}%</span>
@@ -128,10 +128,10 @@ export default function MapWrapper({ data }: MapWrapperProps) {
               </div>
               
               <div class="border-t pt-2 mt-2">
-                <div class="text-xs text-gray-500">
+                <div class="text-xs text-gray-700">
                   Population: ${region.population?.toLocaleString() || 'N/A'}
                 </div>
-                <div class="text-xs text-gray-500">
+                <div class="text-xs text-gray-700">
                   Area: ${region.areaSqKm?.toLocaleString() || 'N/A'} km²
                 </div>
                 <div class="text-xs text-gray-400 mt-1">

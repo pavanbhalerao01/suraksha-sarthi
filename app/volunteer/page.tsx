@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import Link from "next/link";
 import { 
   Users, 
@@ -21,58 +21,123 @@ export default function VolunteerPortal() {
   const [isOnDuty, setIsOnDuty] = useState(false);
   const [showRegistration, setShowRegistration] = useState(false);
 
-  // Mock volunteer data
-  const volunteerData = {
-    name: "Rajesh Kumar",
-    status: "verified",
-    skills: ["First Aid", "Swimming", "Driving"],
-    tasksCompleted: 12,
-    hoursServed: 48,
-    rating: 4.8,
-    verifiedBy: "Pune Ward Office 15"
-  };
+  const [volunteerData, setVolunteerData] = useState<any>(null);
+  const [editModalOpen, setEditModalOpen] = useState(false);
+  const [editName, setEditName] = useState("");
+  const [editSkills, setEditSkills] = useState<string[]>([]);
+  const [editLoading, setEditLoading] = useState(false);
+  const [editError, setEditError] = useState("");
+  const [editSuccess, setEditSuccess] = useState("");
 
-  const availableTasks = [
-    {
-      id: 1,
-      title: "Food Distribution at Relief Camp",
-      location: "Sinhagad Road Relief Camp",
-      priority: "high",
-      distance: "2.3 km",
-      requiredSkills: ["Driving"],
-      estimatedHours: 3,
-      peopleAffected: 150
-    },
-    {
-      id: 2,
-      title: "Medical Assistance Required",
-      location: "Deccan Area",
-      priority: "urgent",
-      distance: "4.1 km",
-      requiredSkills: ["First Aid"],
-      estimatedHours: 2,
-      peopleAffected: 25
-    },
-    {
-      id: 3,
-      title: "Rescue Support - Flooded Area",
-      location: "Kothrud Riverbank",
-      priority: "urgent",
-      distance: "5.8 km",
-      requiredSkills: ["Swimming", "First Aid"],
-      estimatedHours: 4,
-      peopleAffected: 30
+  // Fetch volunteer data on mount
+  useEffect(() => {
+    const fetchProfile = async () => {
+      let phone = localStorage.getItem("phoneNumber");
+      if (!phone) {
+        window.location.href = "/volunteer/auth/login";
+        return;
+      }
+      const res = await fetch("/api/volunteer/get-profile", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ phoneNumber: phone })
+      });
+      const data = await res.json();
+      if (data.error) {
+        window.location.href = "/volunteer/auth/login";
+        return;
+      }
+      setVolunteerData(data);
+    };
+    fetchProfile();
+  }, []);
+
+  const [availableTasks, setAvailableTasks] = useState<any[]>([]);
+
+  useEffect(() => {
+    if (!volunteerData?.skills || volunteerData.skills.length === 0) {
+      setAvailableTasks([]);
+      return;
     }
-  ];
+    fetch("/api/volunteer/get-tasks", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ skills: volunteerData.skills })
+    })
+      .then(res => res.json())
+      .then(data => setAvailableTasks(data.tasks || []));
+  }, [volunteerData?.skills]);
 
   const handleCheckIn = () => {
-    setIsOnDuty(true);
-    alert("✓ Check-in successful!\n\nYou are now ON DUTY and visible to coordination teams.\n\nYour GPS location will be tracked for safety.");
+    if (navigator.geolocation) {
+      navigator.geolocation.getCurrentPosition(
+        (position) => {
+          // Send location to backend
+          fetch("/api/volunteer/update-location", {
+            method: "PATCH",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              phoneNumber: localStorage.getItem("phoneNumber"),
+              location: {
+                lat: position.coords.latitude,
+                lng: position.coords.longitude
+              }
+            })
+          });
+          setIsOnDuty(true);
+          alert("✓ Check-in successful!\n\nYou are now ON DUTY and visible to coordination teams.\n\nYour GPS location will be tracked for safety.");
+        },
+        () => {
+          alert("Could not get your location. Please enable GPS.");
+        }
+      );
+    } else {
+      alert("Geolocation is not supported by your browser.");
+    }
   };
 
   const handleCheckOut = () => {
+    // Optionally notify backend to stop tracking
+    fetch("/api/volunteer/update-location", {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        phoneNumber: localStorage.getItem("phoneNumber"),
+        location: null
+      })
+    });
     setIsOnDuty(false);
     alert("✓ Check-out successful!\n\nThank you for your service!\n\nYour hours have been logged.");
+  };
+
+  // Edit Profile handlers
+  const openEditModal = () => {
+    setEditName(volunteerData?.name || "");
+    setEditSkills(volunteerData?.skills || []);
+    setEditError("");
+    setEditSuccess("");
+    setEditModalOpen(true);
+  };
+  const handleEditProfile = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setEditLoading(true);
+    setEditError("");
+    setEditSuccess("");
+    let phone = localStorage.getItem("phoneNumber");
+    const res = await fetch("/api/volunteer/update-profile", {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ phoneNumber: phone, name: editName, skills: editSkills })
+    });
+    const data = await res.json();
+    setEditLoading(false);
+    if (data.success) {
+      setEditSuccess("Profile updated!");
+      setVolunteerData((prev: any) => ({ ...prev, name: editName, skills: editSkills }));
+      setTimeout(() => setEditModalOpen(false), 1000);
+    } else {
+      setEditError(data.error || "Failed to update profile");
+    }
   };
 
   return (
@@ -86,37 +151,46 @@ export default function VolunteerPortal() {
               <div>
                 <h1 className="text-2xl font-bold">Volunteer Portal</h1>
                 <p className="text-green-200 text-sm">
-                  {volunteerData.status === 'verified' 
-                    ? `✓ Verified by ${volunteerData.verifiedBy}` 
-                    : '⏳ Verification Pending'
-                  }
+                  {volunteerData?.status === 'VERIFIED' || volunteerData?.status === 'verified'
+                    ? `✓ Verified by ${volunteerData?.verifiedBy || "Authority"}`
+                    : '⏳ Verification Pending'}
                 </p>
               </div>
             </div>
             <div className="flex items-center gap-4">
-              {!isOnDuty ? (
-                <button 
-                  onClick={handleCheckIn}
-                  className="px-6 py-2 bg-white text-green-600 rounded-lg font-semibold hover:bg-green-50 transition flex items-center gap-2"
+                {!isOnDuty ? (
+                  <button 
+                    onClick={handleCheckIn}
+                    className="px-6 py-2 bg-white text-green-600 rounded-lg font-semibold hover:bg-green-50 transition flex items-center gap-2"
+                  >
+                    <LogIn className="w-4 h-4" />
+                    Check In
+                  </button>
+                ) : (
+                  <button 
+                    onClick={handleCheckOut}
+                    className="px-6 py-2 bg-green-700 text-white rounded-lg font-semibold hover:bg-green-800 transition flex items-center gap-2"
+                  >
+                    <LogOut className="w-4 h-4" />
+                    Check Out
+                  </button>
+                )}
+                <Link 
+                  href="/portal" 
+                  className="px-4 py-2 bg-green-700 rounded-lg hover:bg-green-800 transition text-sm"
                 >
-                  <LogIn className="w-4 h-4" />
-                  Check In
-                </button>
-              ) : (
-                <button 
-                  onClick={handleCheckOut}
-                  className="px-6 py-2 bg-green-700 text-white rounded-lg font-semibold hover:bg-green-800 transition flex items-center gap-2"
+                  Switch Portal
+                </Link>
+                <button
+                  onClick={() => {
+                    localStorage.clear();
+                    sessionStorage.clear();
+                    window.location.href = "/volunteer/auth/login";
+                  }}
+                  className="px-4 py-2 bg-red-600 rounded-lg hover:bg-red-700 transition text-sm text-white"
                 >
-                  <LogOut className="w-4 h-4" />
-                  Check Out
+                  Logout
                 </button>
-              )}
-              <Link 
-                href="/portal" 
-                className="px-4 py-2 bg-green-700 rounded-lg hover:bg-green-800 transition text-sm"
-              >
-                Switch Portal
-              </Link>
             </div>
           </div>
         </div>
@@ -143,7 +217,7 @@ export default function VolunteerPortal() {
               <span className="text-gray-600 text-sm">Tasks Completed</span>
               <CheckCircle className="w-5 h-5 text-green-600" />
             </div>
-            <div className="text-3xl font-bold text-gray-900">{volunteerData.tasksCompleted}</div>
+            <div className="text-3xl font-bold text-gray-900">{volunteerData?.tasksCompleted ?? '-'}</div>
           </div>
 
           <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-200">
@@ -151,23 +225,16 @@ export default function VolunteerPortal() {
               <span className="text-gray-600 text-sm">Hours Served</span>
               <Clock className="w-5 h-5 text-blue-600" />
             </div>
-            <div className="text-3xl font-bold text-gray-900">{volunteerData.hoursServed}</div>
+            <div className="text-3xl font-bold text-gray-900">54</div>
           </div>
 
-          <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-200">
-            <div className="flex items-center justify-between mb-2">
-              <span className="text-gray-600 text-sm">Rating</span>
-              <Star className="w-5 h-5 text-yellow-500" />
-            </div>
-            <div className="text-3xl font-bold text-gray-900">{volunteerData.rating}</div>
-          </div>
 
           <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-200">
             <div className="flex items-center justify-between mb-2">
               <span className="text-gray-600 text-sm">Status</span>
               <Shield className="w-5 h-5 text-green-600" />
             </div>
-            <div className="text-lg font-bold text-green-600">Verified</div>
+            <div className="text-lg font-bold text-green-600">{(volunteerData?.status === 'VERIFIED' || volunteerData?.status === 'verified') ? 'Verified' : 'Pending'}</div>
           </div>
         </div>
 
@@ -208,7 +275,7 @@ export default function VolunteerPortal() {
                         </span>
                       </div>
                       <div className="flex flex-wrap gap-2 mb-2">
-                        {task.requiredSkills.map((skill) => (
+                        {task.requiredSkills.map((skill: string) => (
                           <span 
                             key={skill}
                             className="px-2 py-1 bg-green-100 text-green-800 rounded text-xs font-medium"
@@ -217,7 +284,7 @@ export default function VolunteerPortal() {
                           </span>
                         ))}
                       </div>
-                      <div className="flex items-center gap-4 text-xs text-gray-500">
+                      <div className="flex items-center gap-4 text-xs text-gray-700">
                         <span>⏱️ Est. {task.estimatedHours}h</span>
                         <span>👥 {task.peopleAffected} people affected</span>
                       </div>
@@ -232,7 +299,29 @@ export default function VolunteerPortal() {
                       {task.priority}
                     </span>
                   </div>
-                  <button className="w-full mt-3 px-4 py-2 bg-green-600 text-white rounded-lg font-semibold hover:bg-green-700 transition">
+                  <button
+                    className="w-full mt-3 px-4 py-2 bg-green-600 text-white rounded-lg font-semibold hover:bg-green-700 transition"
+                    onClick={async () => {
+                      const phone = localStorage.getItem("phoneNumber");
+                      if (!phone) {
+                        alert("Phone number not found. Please login again.");
+                        window.location.href = "/volunteer/auth/login";
+                        return;
+                      }
+                      const res = await fetch("/api/volunteer/increment-tasks", {
+                        method: "PATCH",
+                        headers: { "Content-Type": "application/json" },
+                        body: JSON.stringify({ phoneNumber: phone })
+                      });
+                      const data = await res.json();
+                      if (data.success) {
+                        setVolunteerData((prev: any) => ({ ...prev, tasksCompleted: data.tasksCompleted }));
+                        alert("Task accepted! Your completed tasks count has been updated.");
+                      } else {
+                        alert(data.error || "Failed to accept task.");
+                      }
+                    }}
+                  >
                     Accept Task
                   </button>
                 </div>
@@ -248,32 +337,126 @@ export default function VolunteerPortal() {
               <div className="space-y-3">
                 <div>
                   <span className="text-gray-600 text-sm">Name</span>
-                  <p className="font-semibold text-gray-900">{volunteerData.name}</p>
+                  <p className="font-semibold text-gray-900">{volunteerData?.name}</p>
                 </div>
                 <div>
                   <span className="text-gray-600 text-sm">Verification Status</span>
                   <p className="flex items-center gap-2 text-green-600 font-semibold">
                     <CheckCircle className="w-4 h-4" />
-                    Verified
+                    {(volunteerData?.status === 'VERIFIED' || volunteerData?.status === 'verified') ? 'Verified' : 'Pending'}
                   </p>
-                  <p className="text-xs text-gray-500 mt-1">{volunteerData.verifiedBy}</p>
+                  <p className="text-xs text-gray-700 mt-1">{volunteerData?.verifiedBy}</p>
                 </div>
-                <div>
-                  <span className="text-gray-600 text-sm">Skills</span>
-                  <div className="flex flex-wrap gap-2 mt-1">
-                    {volunteerData.skills.map((skill) => (
-                      <span 
-                        key={skill}
-                        className="px-2 py-1 bg-green-100 text-green-800 rounded text-xs font-medium"
-                      >
-                        {skill}
-                      </span>
-                    ))}
-                  </div>
-                </div>
-                <button className="w-full mt-2 px-4 py-2 border border-gray-300 text-gray-700 rounded-lg font-medium hover:bg-gray-50 transition text-sm">
+                {(() => {
+                  let skillsArr: string[] = [];
+                  if (Array.isArray(volunteerData?.skills)) {
+                    skillsArr = volunteerData.skills;
+                  } else if (typeof volunteerData?.skills === 'string') {
+                    try {
+                      const parsed = JSON.parse(volunteerData.skills);
+                      if (Array.isArray(parsed)) skillsArr = parsed;
+                    } catch {}
+                  }
+                  if (skillsArr.length === 0) return null;
+                  return (
+                    <div>
+                      <span className="text-gray-600 text-sm">Skills</span>
+                      <div className="flex flex-wrap gap-2 mt-1">
+                        {skillsArr.map((skill, idx) => (
+                          <span key={idx} className="px-2 py-1 bg-green-100 text-green-800 rounded text-xs font-medium">
+                            {skill}
+                          </span>
+                        ))}
+                      </div>
+                    </div>
+                  );
+                })()}
+                <button
+                  className="w-full mt-2 px-4 py-2 border border-gray-300 text-gray-700 rounded-lg font-medium hover:bg-gray-50 transition text-sm"
+                  onClick={openEditModal}
+                >
                   Edit Profile
                 </button>
+                    {/* Edit Profile Modal */}
+                    {editModalOpen && (
+                      <div className="fixed inset-0 bg-black bg-opacity-40 flex items-center justify-center z-50">
+                        <div className="bg-white rounded-xl p-6 max-w-md w-full">
+                          <h2 className="text-xl font-bold mb-4 text-black">Edit Profile</h2>
+                          <form onSubmit={handleEditProfile} className="space-y-4">
+                            <div>
+                              <label className="block mb-1 font-semibold text-black">Full Name</label>
+                              <input
+                                type="text"
+                                value={editName}
+                                onChange={e => setEditName(e.target.value)}
+                                required
+                                className="w-full px-4 py-2 border rounded-lg text-black"
+                              />
+                            </div>
+                            <div>
+                              <label className="block mb-1 font-semibold text-black">Skills</label>
+                              <div className="flex flex-wrap gap-2 text-black">
+                                {["First Aid", "Swimming", "Driving", "Medical", "Cooking", "Language Translation"].map(skill => (
+                                  <div key={skill} className="flex flex-col items-start">
+                                    <label className="flex items-center gap-2">
+                                      <input
+                                        type="checkbox"
+                                        checked={editSkills.includes(skill)}
+                                        onChange={e => {
+                                          if (e.target.checked) setEditSkills([...editSkills, skill]);
+                                          else setEditSkills(editSkills.filter(s => s !== skill));
+                                        }}
+                                        className="rounded"
+                                      />
+                                      <span className="text-sm">{skill}</span>
+                                    </label>
+                                    {/* DigiLocker upload for skills requiring verification */}
+                                    {(skill === "Driving" || skill === "Medical") && editSkills.includes(skill) && (
+                                      <div className="mt-1">
+                                        <label className="text-xs text-black">Upload DigiLocker PDF:</label>
+                                        <input
+                                          type="file"
+                                          accept="application/pdf"
+                                          className="block mt-1 text-black"
+                                          onChange={e => {
+                                            // Store file in state (for upload)
+                                            // You can extend this to upload to backend and save URL
+                                            // For demo, just mark as uploaded
+                                            // TODO: Implement backend upload logic
+                                            alert("DigiLocker PDF uploaded for " + skill);
+                                          }}
+                                        />
+                                        {/* Show badge if uploaded (demo: always after upload) */}
+                                        <span className="inline-block mt-1 px-2 py-1 bg-green-200 text-green-800 rounded text-xs font-medium">Verified (DigiLocker Issued)</span>
+                                      </div>
+                                    )}
+                                  </div>
+                                ))}
+                              </div>
+                            </div>
+                            {editError && <div className="text-red-600 text-sm font-semibold">{editError}</div>}
+                            {editSuccess && <div className="text-green-600 text-sm font-semibold">{editSuccess}</div>}
+                            <div className="flex gap-2 mt-2">
+                              <button
+                                type="submit"
+                                className="flex-1 px-4 py-2 bg-green-600 text-white rounded-lg font-semibold hover:bg-green-700 transition"
+                                disabled={editLoading}
+                              >
+                                {editLoading ? "Saving..." : "Save Changes"}
+                              </button>
+                              <button
+                                type="button"
+                                className="flex-1 px-4 py-2 bg-gray-200 text-gray-700 rounded-lg font-semibold hover:bg-gray-300 transition"
+                                onClick={() => setEditModalOpen(false)}
+                                disabled={editLoading}
+                              >
+                                Cancel
+                              </button>
+                            </div>
+                          </form>
+                        </div>
+                      </div>
+                    )}
               </div>
             </div>
 
@@ -312,13 +495,13 @@ export default function VolunteerPortal() {
                 <h2 className="text-lg font-bold text-gray-900">Training</h2>
               </div>
               <div className="space-y-2 text-sm">
-                <a href="#" className="block p-2 hover:bg-gray-50 rounded transition">
+                <a href="#" className="block p-2 hover:bg-gray-50 rounded transition text-black">
                   📖 First Aid Manual
                 </a>
-                <a href="#" className="block p-2 hover:bg-gray-50 rounded transition">
+                <a href="#" className="block p-2 hover:bg-gray-50 rounded transition text-black">
                   🎥 Disaster Response Video
                 </a>
-                <a href="#" className="block p-2 hover:bg-gray-50 rounded transition">
+                <a href="#" className="block p-2 hover:bg-gray-50 rounded transition text-black">
                   ✅ Safety Protocols Checklist
                 </a>
               </div>

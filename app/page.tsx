@@ -34,12 +34,26 @@ export default function Home() {
                 ward-level precision. Empower authorities to act proactively, save lives,
                 and optimize resource allocation.
               </p>
-              <Link
-                href="/portal"
-                className="inline-block bg-blue-600 text-white px-8 py-3 rounded-lg font-semibold hover:bg-blue-700 transition"
-              >
-                Select Portal
-              </Link>
+              <div className="flex gap-4 flex-wrap">
+                <Link
+                  href="/portal"
+                  className="inline-block bg-blue-600 text-white px-8 py-3 rounded-lg font-semibold hover:bg-blue-700 transition"
+                >
+                  Select Portal
+                </Link>
+                <Link
+                  href="/pre-disaster"
+                  className="inline-block bg-green-600 text-white px-8 py-3 rounded-lg font-semibold hover:bg-green-700 transition"
+                >
+                  Pre-Disaster Analysis
+                </Link>
+                <Link
+                  href="/post-disaster"
+                  className="inline-block bg-red-600 text-white px-8 py-3 rounded-lg font-semibold hover:bg-red-700 transition"
+                >
+                  Post-Disaster Analysis
+                </Link>
+              </div>
             </div>
             <div className="bg-gradient-to-br from-blue-100 to-indigo-200 rounded-xl p-8">
               <div className="grid grid-cols-2 gap-4">
