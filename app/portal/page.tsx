@@ -216,7 +216,7 @@ export default function PortalSelectionPage() {
                     <div className="space-y-2">
                       {showTeamDropdown && isSelected ? (
                         <select
-                          className="w-full py-3 px-4 rounded-lg border-2 border-indigo-600 focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                          className="w-full py-3 px-4 rounded-lg border-2 border-indigo-600 focus:outline-none focus:ring-2 focus:ring-indigo-500 text-gray-900 bg-white"
                           value={selectedTeam}
                           onChange={(e) => {
                             setSelectedTeam(e.target.value);
@@ -226,9 +226,9 @@ export default function PortalSelectionPage() {
                           }}
                           onClick={(e) => e.stopPropagation()}
                         >
-                          <option value="">Select Your Team</option>
+                          <option value="" className="text-gray-900">Select Your Team</option>
                           {actionTeams.map((team) => (
-                            <option key={team.id} value={team.route}>
+                            <option key={team.id} value={team.route} className="text-gray-900">
                               {team.name}
                             </option>
                           ))}

@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import Link from "next/link";
 import { useParams } from "next/navigation";
 import { 
@@ -16,7 +16,13 @@ import {
   Power,
   PowerOff,
   Share2,
-  Send
+  Send,
+  X,
+  ExternalLink,
+  Phone,
+  User,
+  Loader2,
+  RefreshCw,
 } from "lucide-react";
 import { useGeolocation, formatCoordinates, shareLocation } from "@/lib/useGeolocation";
 
@@ -58,6 +64,100 @@ const teamConfig = {
   },
 };
 
+// ─── Parse GPS coordinates from strings like "GPS: 18.53110, 73.86621" ───
+function parseGpsFromAddress(text: string): { lat: number; lng: number } | null {
+  if (!text) return null;
+  const m = text.match(/(-?\d{1,3}\.\d+)[,\s]+(-?\d{1,3}\.\d+)/);
+  if (!m) return null;
+  const lat = parseFloat(m[1]);
+  const lng = parseFloat(m[2]);
+  if (lat >= -90 && lat <= 90 && lng >= -180 && lng <= 180) return { lat, lng };
+  return null;
+}
+
+// ─── Inline Leaflet route map ─────────────────────────────────────────────────
+interface RouteMapProps {
+  origin: { lat: number; lng: number; name: string };
+  destination: { lat: number; lng: number };
+}
+function RouteLeafletMap({ origin, destination }: RouteMapProps) {
+  const containerRef = useRef<HTMLDivElement>(null);
+  const mapRef = useRef<any>(null);
+
+  useEffect(() => {
+    if (!containerRef.current) return;
+    // Lazy-load Leaflet to avoid SSR issues
+    import("leaflet").then((L) => {
+      // @ts-ignore
+      import("leaflet/dist/leaflet.css");
+
+      // Fix default icon paths
+      // @ts-ignore
+      delete L.Icon.Default.prototype._getIconUrl;
+      L.Icon.Default.mergeOptions({
+        iconRetinaUrl: "https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/images/marker-icon-2x.png",
+        iconUrl: "https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/images/marker-icon.png",
+        shadowUrl: "https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/images/marker-shadow.png",
+      });
+
+      if (mapRef.current) {
+        mapRef.current.remove();
+        mapRef.current = null;
+      }
+
+      const midLat = (origin.lat + destination.lat) / 2;
+      const midLng = (origin.lng + destination.lng) / 2;
+      const map = L.map(containerRef.current!, { zoomControl: true, scrollWheelZoom: false });
+      mapRef.current = map;
+
+      L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
+        attribution: "© OpenStreetMap contributors",
+        maxZoom: 19,
+      }).addTo(map);
+
+      // Blue marker for team base
+      const blueIcon = new L.Icon({
+        iconUrl: "https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-icon-2x-blue.png",
+        shadowUrl: "https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/images/marker-shadow.png",
+        iconSize: [25, 41], iconAnchor: [12, 41], popupAnchor: [1, -34], shadowSize: [41, 41],
+      });
+      // Red marker for victim
+      const redIcon = new L.Icon({
+        iconUrl: "https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-icon-2x-red.png",
+        shadowUrl: "https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/images/marker-shadow.png",
+        iconSize: [25, 41], iconAnchor: [12, 41], popupAnchor: [1, -34], shadowSize: [41, 41],
+      });
+
+      L.marker([origin.lat, origin.lng], { icon: blueIcon })
+        .addTo(map)
+        .bindPopup(`<b>🏢 Your Base</b><br/>${origin.name}`);
+      L.marker([destination.lat, destination.lng], { icon: redIcon })
+        .addTo(map)
+        .bindPopup(`<b>📍 Victim Location</b><br/>${destination.lat.toFixed(5)}, ${destination.lng.toFixed(5)}`);
+
+      // Dashed line between the two points
+      L.polyline(
+        [[origin.lat, origin.lng], [destination.lat, destination.lng]],
+        { color: "#2563eb", weight: 3, dashArray: "8 6", opacity: 0.9 }
+      ).addTo(map);
+
+      map.fitBounds(
+        [[origin.lat, origin.lng], [destination.lat, destination.lng]],
+        { padding: [40, 40] }
+      );
+    });
+
+    return () => {
+      if (mapRef.current) {
+        mapRef.current.remove();
+        mapRef.current = null;
+      }
+    };
+  }, [origin.lat, origin.lng, destination.lat, destination.lng]);
+
+  return <div ref={containerRef} className="w-full h-64 rounded-lg overflow-hidden border border-gray-200 z-0" />;
+}
+
 export default function ActionTeamPage() {
   const params = useParams();
   const teamType = params.teamType as string;
@@ -73,7 +173,19 @@ export default function ActionTeamPage() {
   // Action team specific states
   const [showIncidentUpload, setShowIncidentUpload] = useState(false);
   const [showHazardReport, setShowHazardReport] = useState(false);
-  const teamId = `${teamType}_${Math.random().toString(36).substr(2, 9)}`;
+
+  // Stable teamId for location tracking (not the assignment teamId from DB)
+  const trackingId = useRef(`${teamType}_${Math.random().toString(36).substr(2, 9)}`).current;
+
+  // DB assignments (from admin forwarded SOS)
+  const [dbAssignments, setDbAssignments] = useState<any[]>([]);
+  const [loadingAssignments, setLoadingAssignments] = useState(false);
+  const [startingResponseId, setStartingResponseId] = useState<string | null>(null);
+
+  // Navigate / map modal
+  const [showNavigateModal, setShowNavigateModal] = useState(false);
+  const [navigateTarget, setNavigateTarget] = useState<any>(null);
+  const [completingId, setCompletingId] = useState<string | null>(null);
   
   // Location tracking with geolocation hook
   const location = useGeolocation({
@@ -95,7 +207,7 @@ export default function ActionTeamPage() {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
-              teamId,
+              teamId: trackingId,
               teamType,
               teamName: team.name,
               latitude: location.latitude,
@@ -127,7 +239,7 @@ export default function ActionTeamPage() {
     if (!newDutyStatus && teamType !== 'relief-camp') {
       // Going off duty - remove from tracking
       try {
-        await fetch(`/api/location/track?teamId=${teamId}`, {
+        await fetch(`/api/location/track?teamId=${trackingId}`, {
           method: 'DELETE',
         });
       } catch (error) {
@@ -161,7 +273,7 @@ export default function ActionTeamPage() {
   // Upload incident photos handler
   const handleIncidentUpload = async (formData: FormData) => {
     try {
-      formData.append('teamId', teamId);
+      formData.append('teamId', trackingId);
       formData.append('teamType', teamType);
       formData.append('teamName', team.name);
       
@@ -193,7 +305,7 @@ export default function ActionTeamPage() {
   const handleHazardReport = async (formData: FormData) => {
     try {
       const hazardData = {
-        teamId,
+        teamId: trackingId,
         teamType,
         teamName: team.name,
         hazardType: formData.get('hazardType'),
@@ -416,29 +528,108 @@ export default function ActionTeamPage() {
     }
   };
 
-  // Mock assigned incidents
-  const assignedIncidents = [
-    {
-      id: "INC-001",
-      type: "Building Collapse",
-      location: "Sinhagad Road, Pune",
-      distance: "2.3 km",
-      priority: "urgent",
-      peopleAffected: 15,
-      status: "assigned",
-      assignedTime: "10 min ago",
-    },
-    {
-      id: "INC-002",
-      type: "Flood Rescue",
-      location: "Deccan Area",
-      distance: "4.1 km",
-      priority: "high",
-      peopleAffected: 8,
-      status: "assigned",
-      assignedTime: "25 min ago",
-    },
-  ];
+  // Fetch DB-assigned incidents from admin-forwarded SOS
+  const fetchAssignments = async () => {
+    setLoadingAssignments(true);
+    try {
+      const res = await fetch(`/api/sos/team-assignments?teamType=${teamType}`);
+      const data = await res.json();
+      if (data.success) {
+        setDbAssignments(data.assignments);
+      }
+    } catch (error) {
+      console.error("Failed to fetch assignments:", error);
+    } finally {
+      setLoadingAssignments(false);
+    }
+  };
+
+  // Fetch on mount and poll every 30s
+  useEffect(() => {
+    fetchAssignments();
+    const interval = setInterval(fetchAssignments, 30000);
+    return () => clearInterval(interval);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [teamType]);
+
+  // Start Response: sets status to IN_PROGRESS and blocks team in admin
+  const handleStartResponse = async (assignment: any) => {
+    if (assignment.status === "IN_PROGRESS") return;
+    setStartingResponseId(assignment.id);
+    try {
+      const res = await fetch(
+        `/api/sos/team-assignments/${assignment.id}/start-response`,
+        { method: "PATCH" }
+      );
+      const data = await res.json();
+      if (data.success) {
+        setDbAssignments((prev) =>
+          prev.map((a) =>
+            a.id === assignment.id ? { ...a, status: "IN_PROGRESS" } : a
+          )
+        );
+      } else {
+        alert("Failed to start response: " + data.error);
+      }
+    } catch {
+      alert("Failed to start response. Please check your connection.");
+    } finally {
+      setStartingResponseId(null);
+    }
+  };
+
+  // Mark assignment as RESOLVED (completed) and remove from list
+  const handleMarkCompleted = async (assignment: any) => {
+    if (!confirm("Mark this incident as completed? It will be removed from your assignment list.")) return;
+    setCompletingId(assignment.id);
+    try {
+      const res = await fetch(
+        `/api/sos/team-assignments/${assignment.id}/start-response`,
+        { method: "PUT" }
+      );
+      const data = await res.json();
+      if (data.success) {
+        setDbAssignments((prev) => prev.filter((a) => a.id !== assignment.id));
+      } else {
+        alert("Failed to complete: " + (data.error || "Unknown error"));
+      }
+    } catch {
+      alert("Failed to connect to server.");
+    } finally {
+      setCompletingId(null);
+    }
+  };
+
+  // Open Navigate modal
+  const handleNavigate = (assignment: any) => {
+    setNavigateTarget(assignment);
+    setShowNavigateModal(true);
+  };
+
+  // Team office locations (for navigation origin)
+  const TEAM_OFFICES: Record<string, { lat: number; lng: number; name: string }> = {
+    ndrf: { lat: 18.5204, lng: 73.8567, name: "NDRF Battalion HQ, Pune" },
+    sdrf: { lat: 18.9220, lng: 72.8347, name: "SDRF HQ, Maharashtra" },
+    fire: { lat: 18.5204, lng: 73.8567, name: "Pune Fire Brigade HQ" },
+    police: { lat: 18.5030, lng: 73.8476, name: "Pune Police Commissionerate" },
+    medical: { lat: 18.5310, lng: 73.8476, name: "Sassoon General Hospital, Pune" },
+    "civil-defense": { lat: 18.5204, lng: 73.8567, name: "Civil Defense HQ, Pune" },
+    "relief-camp": { lat: 18.5204, lng: 73.8567, name: "Relief Camp HQ, Pune" },
+  };
+
+  // Map type to priority for display
+  const getPriorityByDisasterType = (type: string): "urgent" | "high" | "medium" => {
+    if (!type) return "high";
+    const t = type.toLowerCase();
+    if (t.includes("building") || t.includes("fire") || t.includes("earthquake") || t.includes("collapse")) return "urgent";
+    if (t.includes("flood") || t.includes("cyclone") || t.includes("medical")) return "high";
+    return "medium";
+  };
+
+  // Combined incidents: DB assignments first (real), then fallback mock if no DB data
+  const assignedIncidents = dbAssignments.length > 0
+    ? dbAssignments
+    : []; // Empty if no DB assignments yet
 
   // Relief Camp Dashboard
   if (teamType === 'relief-camp') {
@@ -1229,60 +1420,156 @@ export default function ActionTeamPage() {
           <div className="lg:col-span-2 bg-white p-6 rounded-xl shadow-sm border border-gray-200">
             <div className="flex items-center justify-between mb-4">
               <h2 className="text-lg font-bold text-gray-900">Assigned Incidents</h2>
-              <span className={`px-3 py-1 bg-${team.color}-100 text-${team.color}-800 rounded-full text-xs font-medium`}>
-                {assignedIncidents.length} Active
-              </span>
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={fetchAssignments}
+                  disabled={loadingAssignments}
+                  className={`p-1.5 rounded-lg text-gray-500 hover:bg-gray-100 transition ${loadingAssignments ? 'animate-spin' : ''}`}
+                  title="Refresh"
+                >
+                  <RefreshCw className="w-4 h-4" />
+                </button>
+                <span className={`px-3 py-1 bg-${team.color}-100 text-${team.color}-800 rounded-full text-xs font-medium`}>
+                  {assignedIncidents.length} Active
+                </span>
+              </div>
             </div>
             
             <div className="space-y-4">
-              {assignedIncidents.map((incident) => (
-                <div 
-                  key={incident.id} 
-                  className={`border-l-4 ${
-                    incident.priority === 'urgent' 
-                      ? 'border-red-600 bg-red-50' 
-                      : 'border-orange-600 bg-orange-50'
-                  } p-4 rounded-lg`}
-                >
-                  <div className="flex items-start justify-between mb-2">
-                    <div className="flex-1">
-                      <div className="flex items-center gap-2 mb-1">
-                        <span className={`px-2 py-1 rounded text-xs font-bold uppercase ${
-                          incident.priority === 'urgent'
-                            ? 'bg-red-600 text-white'
-                            : 'bg-orange-600 text-white'
-                        }`}>
-                          {incident.priority}
-                        </span>
-                        <span className="font-bold text-gray-900">{incident.id}</span>
+              {loadingAssignments && assignedIncidents.length === 0 ? (
+                <div className="flex items-center justify-center py-10 text-gray-400">
+                  <Loader2 className="w-6 h-6 animate-spin mr-2" />
+                  <span className="text-sm">Checking for assignments...</span>
+                </div>
+              ) : assignedIncidents.length === 0 ? (
+                <div className="text-center py-10 text-gray-400 border-2 border-dashed border-gray-200 rounded-lg">
+                  <Radio className="w-10 h-10 mx-auto mb-3 opacity-40" />
+                  <p className="text-sm font-medium">No Active Assignments</p>
+                  <p className="text-xs mt-1 text-gray-400">Assignments forwarded by NDRF Admin will appear here automatically.</p>
+                </div>
+              ) : (
+                assignedIncidents.map((incident) => {
+                  // Support both DB schema (assignment) and legacy mock format
+                  const isDB = !!incident.disasterType;
+                  const priority = isDB ? getPriorityByDisasterType(incident.disasterType) : (incident.priority as "urgent" | "high" | "medium");
+                  const incidentId = isDB ? incident.teamId : incident.id;
+                  const incidentTitle = isDB ? incident.disasterType : incident.type;
+                  const incidentLocation = isDB ? incident.address : incident.location;
+                  const peopleAffected = isDB ? (incident.injuredCount + incident.affectedFamilies * 3) : incident.peopleAffected;
+                  const assignedTime = isDB
+                    ? new Date(incident.assignedAt).toLocaleString("en-IN", { hour: "2-digit", minute: "2-digit", hour12: true })
+                    : incident.assignedTime;
+                  const isInProgress = incident.status === "IN_PROGRESS";
+
+                  return (
+                    <div
+                      key={incident.id}
+                      className={`border-l-4 ${
+                        isInProgress
+                          ? 'border-green-600 bg-green-50'
+                          : priority === 'urgent'
+                          ? 'border-red-600 bg-red-50'
+                          : 'border-orange-600 bg-orange-50'
+                      } p-4 rounded-lg`}
+                    >
+                      <div className="flex items-start justify-between mb-2">
+                        <div className="flex-1">
+                          <div className="flex items-center gap-2 mb-1 flex-wrap">
+                            <span className={`px-2 py-1 rounded text-xs font-bold uppercase ${
+                              isInProgress
+                                ? 'bg-green-600 text-white'
+                                : priority === 'urgent'
+                                ? 'bg-red-600 text-white'
+                                : 'bg-orange-600 text-white'
+                            }`}>
+                              {isInProgress ? '🔄 In Progress' : priority}
+                            </span>
+                            {/* Team ID badge (from DB) */}
+                            {isDB && (
+                              <span className="px-2 py-1 bg-blue-600 text-white rounded text-xs font-mono font-bold">
+                                ID: {incident.teamId}
+                              </span>
+                            )}
+                            {/* Severity badge */}
+                            {isDB && (
+                              <span className={`px-2 py-1 rounded text-xs font-medium border ${
+                                incident.severity === 'CRITICAL'
+                                  ? 'bg-red-100 text-red-800 border-red-300'
+                                  : incident.severity === 'HIGH'
+                                  ? 'bg-orange-100 text-orange-800 border-orange-300'
+                                  : 'bg-yellow-100 text-yellow-800 border-yellow-300'
+                              }`}>
+                                {incident.severity}
+                              </span>
+                            )}
+                            {!isDB && (
+                              <span className="font-bold text-gray-900">{incident.id}</span>
+                            )}
+                          </div>
+                          <h3 className="font-bold text-gray-900 text-lg mb-1">{incidentTitle}</h3>
+                          {isDB && (
+                            <p className="text-sm text-gray-700 mb-2">{incident.description}</p>
+                          )}
+                          <div className="flex items-center gap-4 text-sm text-gray-600 mb-2 flex-wrap">
+                            <span className="flex items-center gap-1">
+                              <MapPin className="w-4 h-4" />
+                              {incidentLocation}
+                            </span>
+                          </div>
+                          <div className="flex items-center gap-4 text-xs text-gray-700 flex-wrap">
+                            <span>👥 {peopleAffected} people affected</span>
+                            <span>🕐 Assigned {assignedTime}</span>
+                            {isDB && (
+                              <>
+                                <span className="flex items-center gap-1">
+                                  <User className="w-3 h-3" /> {incident.reporterName}
+                                </span>
+                                <span className="flex items-center gap-1">
+                                  <Phone className="w-3 h-3" /> {incident.reporterPhone}
+                                </span>
+                              </>
+                            )}
+                          </div>
+                        </div>
                       </div>
-                      <h3 className="font-bold text-gray-900 text-lg mb-1">{incident.type}</h3>
-                      <div className="flex items-center gap-4 text-sm text-gray-600 mb-2">
-                        <span className="flex items-center gap-1">
-                          <MapPin className="w-4 h-4" />
-                          {incident.location}
-                        </span>
-                        <span className="flex items-center gap-1">
+                      <div className="flex gap-2 mt-3 flex-wrap">
+                        <button
+                          onClick={() => handleNavigate(incident)}
+                          className={`flex-1 px-4 py-2 bg-${team.color}-600 text-white rounded-lg font-semibold hover:bg-${team.color}-700 transition flex items-center justify-center gap-2`}
+                        >
                           <Navigation className="w-4 h-4" />
-                          {incident.distance}
-                        </span>
-                      </div>
-                      <div className="flex items-center gap-4 text-xs text-gray-700">
-                        <span>👥 {incident.peopleAffected} people affected</span>
-                        <span>🕐 Assigned {incident.assignedTime}</span>
+                          Navigate
+                        </button>
+                        {isInProgress ? (
+                          <button
+                            onClick={() => handleMarkCompleted(incident)}
+                            disabled={completingId === incident.id}
+                            className="flex-1 px-4 py-2 bg-emerald-600 text-white rounded-lg font-semibold hover:bg-emerald-700 transition disabled:opacity-60 flex items-center justify-center gap-2"
+                          >
+                            {completingId === incident.id ? (
+                              <><Loader2 className="w-4 h-4 animate-spin" /> Completing...</>
+                            ) : (
+                              <><CheckCircle className="w-4 h-4" /> Mark as Completed</>
+                            )}
+                          </button>
+                        ) : (
+                          <button
+                            onClick={() => handleStartResponse(incident)}
+                            disabled={startingResponseId === incident.id}
+                            className="flex-1 px-4 py-2 bg-green-600 text-white rounded-lg font-semibold hover:bg-green-700 transition disabled:opacity-60 flex items-center justify-center gap-2"
+                          >
+                            {startingResponseId === incident.id ? (
+                              <><Loader2 className="w-4 h-4 animate-spin" /> Starting...</>
+                            ) : (
+                              "Start Response"
+                            )}
+                          </button>
+                        )}
                       </div>
                     </div>
-                  </div>
-                  <div className="flex gap-2 mt-3">
-                    <button className={`flex-1 px-4 py-2 bg-${team.color}-600 text-white rounded-lg font-semibold hover:bg-${team.color}-700 transition`}>
-                      Navigate
-                    </button>
-                    <button className="flex-1 px-4 py-2 bg-green-600 text-white rounded-lg font-semibold hover:bg-green-700 transition">
-                      Start Response
-                    </button>
-                  </div>
-                </div>
-              ))}
+                  );
+                })
+              )}
             </div>
           </div>
 
@@ -1680,6 +1967,133 @@ export default function ActionTeamPage() {
         )}
 
       </div>
+
+      {/* ===== NAVIGATE MAP MODAL ===== */}
+      {showNavigateModal && navigateTarget && (() => {
+        const teamOffice = TEAM_OFFICES[teamType] || {
+          lat: 18.5204,
+          lng: 73.8567,
+          name: `${team.name} HQ, Pune`,
+        };
+        const victimAddress = navigateTarget.address || navigateTarget.location || "Incident Location";
+
+        // Resolve coordinates — use DB fields if present, else parse from address text
+        const rawLat = (navigateTarget.lat !== null && navigateTarget.lat !== undefined)
+          ? Number(navigateTarget.lat) : null;
+        const rawLng = (navigateTarget.lng !== null && navigateTarget.lng !== undefined)
+          ? Number(navigateTarget.lng) : null;
+        const parsed = (!rawLat || !rawLng) ? parseGpsFromAddress(victimAddress) : null;
+        const victimLat = (rawLat && !isNaN(rawLat)) ? rawLat : (parsed?.lat ?? null);
+        const victimLng = (rawLng && !isNaN(rawLng)) ? rawLng : (parsed?.lng ?? null);
+        const hasCoords = victimLat !== null && victimLng !== null;
+
+        // Google Maps directions URL — always uses real coordinates or address
+        const gmOrigin = `${teamOffice.lat},${teamOffice.lng}`;
+        const gmDest = hasCoords
+          ? `${victimLat},${victimLng}`
+          : encodeURIComponent(victimAddress);
+        const googleMapsUrl = `https://www.google.com/maps/dir/${gmOrigin}/${gmDest}`;
+
+        return (
+          <div className="fixed inset-0 bg-black bg-opacity-60 flex items-center justify-center z-50 p-4">
+            <div className="bg-white rounded-xl shadow-2xl max-w-2xl w-full max-h-[90vh] flex flex-col">
+              {/* Header */}
+              <div className={`bg-${team.color}-600 text-white p-5 rounded-t-xl flex items-center justify-between`}>
+                <div>
+                  <h3 className="text-xl font-bold flex items-center gap-2">
+                    <Navigation className="w-5 h-5" />
+                    Navigate to Incident
+                  </h3>
+                  <p className="text-sm opacity-90 mt-0.5">From {teamOffice.name}</p>
+                </div>
+                <button onClick={() => setShowNavigateModal(false)} className="hover:bg-white/20 rounded-full p-2 transition">
+                  <X className="w-5 h-5" />
+                </button>
+              </div>
+
+              <div className="p-5 space-y-4 overflow-y-auto flex-1">
+                {/* Incident summary */}
+                <div className="bg-red-50 border border-red-200 rounded-lg p-4 space-y-2">
+                  <div className="flex items-center gap-2">
+                    <AlertTriangle className="w-5 h-5 text-red-600 flex-shrink-0" />
+                    <div>
+                      <div className="font-bold text-gray-900">{navigateTarget.disasterType || navigateTarget.type}</div>
+                      <div className="text-sm text-gray-700">{navigateTarget.title || navigateTarget.description}</div>
+                    </div>
+                  </div>
+                  <div className="grid grid-cols-2 gap-3 mt-2 text-sm">
+                    <div className="bg-white rounded p-2 border border-red-100">
+                      <div className="text-xs text-gray-500 mb-0.5">📍 Victim Location</div>
+                      <div className="font-medium text-gray-900 break-words">{victimAddress}</div>
+                      {hasCoords && (
+                        <div className="text-xs font-mono text-gray-500 mt-0.5">{victimLat!.toFixed(5)}, {victimLng!.toFixed(5)}</div>
+                      )}
+                    </div>
+                    <div className="bg-white rounded p-2 border border-red-100">
+                      <div className="text-xs text-gray-500 mb-0.5">🏢 Your Base</div>
+                      <div className="font-medium text-gray-900">{teamOffice.name}</div>
+                      <div className="text-xs font-mono text-gray-500 mt-0.5">{teamOffice.lat.toFixed(5)}, {teamOffice.lng.toFixed(5)}</div>
+                    </div>
+                  </div>
+                  {navigateTarget.reporterName && (
+                    <div className="flex flex-wrap gap-4 text-sm border-t border-red-100 pt-2 mt-2">
+                      <span className="flex items-center gap-1 text-gray-700"><User className="w-3.5 h-3.5" /> {navigateTarget.reporterName}</span>
+                      <span className="flex items-center gap-1 text-gray-700"><Phone className="w-3.5 h-3.5" /> {navigateTarget.reporterPhone}</span>
+                    </div>
+                  )}
+                </div>
+
+                {/* Route map */}
+                <div>
+                  <h4 className="text-sm font-semibold text-gray-700 mb-2">🗺️ Route: Your Base → Victim Location</h4>
+                  {hasCoords ? (
+                    <RouteLeafletMap
+                      origin={{ lat: teamOffice.lat, lng: teamOffice.lng, name: teamOffice.name }}
+                      destination={{ lat: victimLat!, lng: victimLng! }}
+                    />
+                  ) : (
+                    <div className="h-36 bg-gray-100 rounded-lg flex flex-col items-center justify-center text-gray-500 border border-gray-200">
+                      <MapPin className="w-8 h-8 mb-2 opacity-40" />
+                      <p className="text-sm">GPS coordinates not available for this incident</p>
+                      <p className="text-xs text-gray-400 mt-1">Use the Google Maps button below to route by address</p>
+                    </div>
+                  )}
+                </div>
+
+                {/* Google Maps CTA */}
+                <a
+                  href={googleMapsUrl}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="flex items-center justify-between p-4 bg-blue-600 text-white rounded-xl hover:bg-blue-700 transition font-semibold shadow-md"
+                >
+                  <span className="flex items-center gap-3">
+                    <span className="text-2xl">🗺️</span>
+                    <div>
+                      <div className="text-base">Get Directions — Google Maps</div>
+                      <div className="text-xs font-normal opacity-90">
+                        {hasCoords
+                          ? `From ${teamOffice.lat.toFixed(4)},${teamOffice.lng.toFixed(4)} → ${victimLat!.toFixed(4)},${victimLng!.toFixed(4)}`
+                          : "Turn-by-turn from your base to victim address"}
+                      </div>
+                    </div>
+                  </span>
+                  <ExternalLink className="w-5 h-5 opacity-80" />
+                </a>
+              </div>
+
+              <div className="p-4 border-t bg-gray-50 rounded-b-xl">
+                <button
+                  onClick={() => setShowNavigateModal(false)}
+                  className="w-full px-4 py-2 bg-gray-200 text-gray-700 rounded-lg font-semibold hover:bg-gray-300 transition"
+                >
+                  Close
+                </button>
+              </div>
+            </div>
+          </div>
+        );
+      })()}
     </div>
   );
 }

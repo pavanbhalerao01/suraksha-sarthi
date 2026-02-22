@@ -110,10 +110,98 @@ export default function CitizenPortal() {
   const [activeTab, setActiveTab] = useState<"sos" | "hospitals">("sos");
   const [selectedDisaster, setSelectedDisaster] = useState<Disaster | null>(null);
 
-  const handleSOS = () => {
-    setSosActive(true);
-    // In production: Get GPS location, send to backend immediately
-    alert("🚨 SOS ACTIVATED!\n\nYour location and emergency alert have been sent to authorities.\nHelp is on the way.\n\nTicket ID: SOS-2025-" + Math.random().toString(36).substr(2, 9).toUpperCase());
+  // SOS Modal state
+  const [showSOSModal, setShowSOSModal] = useState(false);
+  const [sosSubmitting, setSosSubmitting] = useState(false);
+  const [sosTicket, setSosTicket] = useState<string | null>(null);
+  const [gpsLoading, setGpsLoading] = useState(false);
+  const [gpsError, setGpsError] = useState<string | null>(null);
+  const [gpsCoords, setGpsCoords] = useState<{ lat: number; lng: number; accuracy: number } | null>(null);
+  const [manualCoords, setManualCoords] = useState({ lat: "", lng: "" });
+  const [useManual, setUseManual] = useState(false);
+  const [sosForm, setSosForm] = useState({ name: "", phone: "", disasterType: "flood", description: "" });
+
+  const requestGPS = () => {
+    if (!navigator.geolocation) {
+      setGpsError("GPS not supported on this device.");
+      return;
+    }
+    setGpsLoading(true);
+    setGpsError(null);
+    setGpsCoords(null);
+    navigator.geolocation.getCurrentPosition(
+      (pos) => {
+        setGpsCoords({
+          lat: pos.coords.latitude,
+          lng: pos.coords.longitude,
+          accuracy: pos.coords.accuracy,
+        });
+        setGpsLoading(false);
+        setGpsError(null);
+      },
+      (err) => {
+        setGpsLoading(false);
+        if (err.code === 1) {
+          setGpsError("Location permission denied. Allow location in browser settings and Retry, or enter coordinates manually below.");
+        } else if (err.code === 2) {
+          setGpsError("GPS unavailable. Turn on Location/GPS on your device and Retry, or enter coordinates manually.");
+        } else {
+          setGpsError("Location request timed out. Retry or enter coordinates manually.");
+        }
+      },
+      { timeout: 15000, enableHighAccuracy: true, maximumAge: 0 }
+    );
+  };
+
+  const openSOSModal = () => {
+    setShowSOSModal(true);
+    setSosTicket(null);
+    setGpsCoords(null);
+    setGpsError(null);
+    setUseManual(false);
+    setManualCoords({ lat: "", lng: "" });
+    setSosForm({ name: "", phone: "", disasterType: "flood", description: "" });
+    // Don't auto-call — user must explicitly tap the button so browser shows permission prompt
+  };
+
+  // Final coordinates to submit
+  const finalLat = useManual ? parseFloat(manualCoords.lat) || null : gpsCoords?.lat ?? null;
+  const finalLng = useManual ? parseFloat(manualCoords.lng) || null : gpsCoords?.lng ?? null;
+  const hasValidCoords = useManual
+    ? !isNaN(parseFloat(manualCoords.lat)) && !isNaN(parseFloat(manualCoords.lng))
+    : gpsCoords !== null;
+
+  const submitSOS = async () => {
+    if (!sosForm.name.trim() || !sosForm.phone.trim()) return;
+    if (!hasValidCoords) return;
+    setSosSubmitting(true);
+    try {
+      const res = await fetch("/api/citizen-sos", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          name: sosForm.name,
+          phone: sosForm.phone,
+          disasterType: sosForm.disasterType,
+          description: sosForm.description || undefined,
+          address: null,
+          lat: finalLat,
+          lng: finalLng,
+          severity: "HIGH",
+        }),
+      });
+      const data = await res.json();
+      if (data.success) {
+        setSosTicket(data.data.ticketId);
+        setSosActive(true);
+      } else {
+        alert("Failed to send SOS: " + data.error);
+      }
+    } catch {
+      alert("Network error. Please try again.");
+    } finally {
+      setSosSubmitting(false);
+    }
   };
 
   return (
@@ -175,36 +263,246 @@ export default function CitizenPortal() {
           <div className="text-center">
             <h2 className="text-3xl font-bold mb-3">Emergency SOS</h2>
             <p className="text-red-100 mb-6">
-              Press button below if you need immediate help. Your location will be shared with rescue teams.
+              Press button below if you need immediate help. Your name, contact and GPS location will be sent to rescue authorities.
             </p>
-            <button 
-              onClick={handleSOS}
-              className={`w-48 h-48 mx-auto rounded-full font-bold text-2xl shadow-2xl transition-all transform hover:scale-105 active:scale-95 ${
-                sosActive 
-                  ? 'bg-green-500 animate-pulse' 
-                  : 'bg-white text-red-600 hover:bg-red-50'
+            <button
+              onClick={sosActive ? undefined : openSOSModal}
+              className={`w-48 h-48 mx-auto rounded-full font-bold text-2xl shadow-2xl transition-all transform hover:scale-105 active:scale-95 flex flex-col items-center justify-center ${
+                sosActive
+                  ? "bg-green-500 animate-pulse cursor-default"
+                  : "bg-white text-red-600 hover:bg-red-50"
               }`}
             >
               {sosActive ? (
-                <div className="flex flex-col items-center">
+                <>
                   <CheckCircle className="w-16 h-16 mb-2" />
                   <span className="text-lg">SOS Sent!</span>
-                </div>
+                </>
               ) : (
-                <div className="flex flex-col items-center">
+                <>
                   <AlertCircle className="w-16 h-16 mb-2" />
                   <span>HELP!</span>
-                </div>
+                </>
               )}
             </button>
-            {sosActive && (
+            {sosActive && sosTicket && (
               <div className="mt-4 bg-green-600 p-3 rounded-lg">
                 <p className="font-semibold">✓ Authorities have been alerted</p>
-                <p className="text-green-100 text-sm">Ticket ID: SOS-2025-ABC123</p>
+                <p className="text-green-100 text-sm">Ticket ID: <strong>{sosTicket}</strong></p>
+                <p className="text-green-200 text-xs mt-1">Keep this ID to track your request</p>
               </div>
             )}
           </div>
         </div>
+
+        {/* ─── SOS Modal ─── */}
+        {showSOSModal && (
+          <div className="fixed inset-0 bg-black bg-opacity-60 flex items-center justify-center z-50 p-4">
+            <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md">
+              <div className="bg-gradient-to-r from-red-600 to-rose-600 text-white p-5 rounded-t-2xl">
+                <h3 className="text-xl font-bold flex items-center gap-2">
+                  <AlertCircle className="w-5 h-5" /> Send Emergency SOS
+                </h3>
+                <p className="text-red-100 text-sm mt-1">Your info + GPS location will be sent to NDRF Admin</p>
+              </div>
+              {sosTicket ? (
+                <div className="p-6 text-center">
+                  <CheckCircle className="w-16 h-16 text-green-500 mx-auto mb-3" />
+                  <h4 className="text-xl font-bold text-gray-900 mb-2">SOS Sent Successfully!</h4>
+                  <div className="bg-green-50 border border-green-200 rounded-lg p-4 mb-4">
+                    <p className="text-sm text-gray-700">Your Ticket ID:</p>
+                    <p className="text-2xl font-mono font-bold text-green-700">{sosTicket}</p>
+                    <p className="text-xs text-gray-500 mt-1">Save this ID to track your request</p>
+                  </div>
+                  {gpsCoords && (
+                    <p className="text-xs text-gray-500 mb-4">📍 Location shared: {gpsCoords.lat.toFixed(5)}, {gpsCoords.lng.toFixed(5)}</p>
+                  )}
+                  <button
+                    onClick={() => setShowSOSModal(false)}
+                    className="w-full py-3 bg-green-600 text-white rounded-lg font-semibold"
+                  >
+                    Close
+                  </button>
+                </div>
+              ) : (
+                <div className="p-6 space-y-4">
+                  {/* GPS Location — explicit user tap required */}
+                  <div className="space-y-2">
+                    <label className="block text-sm font-semibold text-gray-700">Your Location <span className="text-red-500">*</span></label>
+
+                    {/* Not yet requested, no error, GPS mode */}
+                    {!gpsLoading && !gpsCoords && !gpsError && !useManual && (
+                      <button
+                        type="button"
+                        onClick={requestGPS}
+                        className="w-full py-2.5 bg-blue-600 text-white rounded-lg font-semibold hover:bg-blue-700 flex items-center justify-center gap-2"
+                      >
+                        <Navigation className="w-4 h-4" />
+                        Tap to Share My Location
+                      </button>
+                    )}
+
+                    {/* Loading */}
+                    {gpsLoading && (
+                      <div className="flex items-center gap-2 text-sm rounded-lg px-3 py-2 bg-yellow-50 text-yellow-800 border border-yellow-300">
+                        <span className="w-4 h-4 border-2 border-yellow-600 border-t-transparent rounded-full animate-spin flex-shrink-0" />
+                        Requesting GPS permission — please allow in browser prompt
+                      </div>
+                    )}
+
+                    {/* GPS success */}
+                    {!gpsLoading && gpsCoords && !useManual && (
+                      <div className="space-y-1">
+                        <div className="flex items-center gap-2 text-sm rounded-lg px-3 py-2 bg-green-50 text-green-800 border border-green-300">
+                          <span className="text-green-600 text-base font-bold">✓</span>
+                          <span>
+                            <strong className="font-mono">{gpsCoords.lat.toFixed(6)}, {gpsCoords.lng.toFixed(6)}</strong>
+                            <span className="ml-2 text-xs text-green-700">±{Math.round(gpsCoords.accuracy)}m</span>
+                          </span>
+                        </div>
+                        {gpsCoords.accuracy > 500 && (
+                          <div className="text-xs text-orange-700 bg-orange-50 border border-orange-200 rounded px-3 py-1.5">
+                            ⚠️ Low accuracy ({Math.round(gpsCoords.accuracy)}m) — browser used network/IP location, not real GPS. On mobile, enable GPS in settings and{" "}
+                            <button type="button" onClick={requestGPS} className="underline font-semibold">retry</button>.
+                          </div>
+                        )}
+                      </div>
+                    )}
+
+                    {/* GPS error */}
+                    {!gpsLoading && gpsError && !useManual && (
+                      <div className="rounded-lg border border-red-300 bg-red-50 p-3 space-y-2">
+                        <p className="text-sm text-red-800">{gpsError}</p>
+                        <button type="button" onClick={requestGPS} className="w-full py-1.5 bg-red-600 text-white rounded-lg text-sm font-semibold hover:bg-red-700">
+                          Retry GPS
+                        </button>
+                      </div>
+                    )}
+
+                    {/* Manual coordinate entry */}
+                    {useManual && (
+                      <div className="space-y-2">
+                        <div className="flex gap-2">
+                          <div className="flex-1">
+                            <label className="text-xs text-gray-500 mb-0.5 block">Latitude</label>
+                            <input
+                              type="number"
+                              step="any"
+                              value={manualCoords.lat}
+                              onChange={(e) => setManualCoords((c) => ({ ...c, lat: e.target.value }))}
+                              placeholder="e.g. 18.52043"
+                              className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-red-500 focus:border-transparent"
+                            />
+                          </div>
+                          <div className="flex-1">
+                            <label className="text-xs text-gray-500 mb-0.5 block">Longitude</label>
+                            <input
+                              type="number"
+                              step="any"
+                              value={manualCoords.lng}
+                              onChange={(e) => setManualCoords((c) => ({ ...c, lng: e.target.value }))}
+                              placeholder="e.g. 73.85671"
+                              className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-red-500 focus:border-transparent"
+                            />
+                          </div>
+                        </div>
+                        <p className="text-xs text-gray-500">Open Google Maps → long-press your location → copy the numbers shown</p>
+                        <button type="button" onClick={() => { setUseManual(false); setGpsCoords(null); setGpsError(null); }} className="text-xs text-blue-600 underline">
+                          ← Try GPS again instead
+                        </button>
+                      </div>
+                    )}
+
+                    {/* Toggle to manual */}
+                    {!useManual && (
+                      <button
+                        type="button"
+                        onClick={() => { setUseManual(true); setGpsCoords(null); setGpsError(null); setManualCoords({ lat: "", lng: "" }); }}
+                        className="text-xs text-gray-500 underline hover:text-gray-700"
+                      >
+                        GPS not working? Enter coordinates manually
+                      </button>
+                    )}
+                  </div>
+
+                  <div>
+                    <label className="block text-sm font-semibold text-gray-700 mb-1">Your Name <span className="text-red-500">*</span></label>
+                    <input
+                      type="text"
+                      value={sosForm.name}
+                      onChange={(e) => setSosForm((f) => ({ ...f, name: e.target.value }))}
+                      placeholder="Full name"
+                      className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-red-500 focus:border-transparent"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-sm font-semibold text-gray-700 mb-1">Phone Number <span className="text-red-500">*</span></label>
+                    <input
+                      type="tel"
+                      value={sosForm.phone}
+                      onChange={(e) => setSosForm((f) => ({ ...f, phone: e.target.value }))}
+                      placeholder="+91 XXXXX XXXXX"
+                      className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-red-500 focus:border-transparent"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-sm font-semibold text-gray-700 mb-1">Emergency Type</label>
+                    <select
+                      value={sosForm.disasterType}
+                      onChange={(e) => setSosForm((f) => ({ ...f, disasterType: e.target.value }))}
+                      className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-red-500 focus:border-transparent"
+                    >
+                      <option value="flood">🌊 Flood</option>
+                      <option value="fire">🔥 Fire</option>
+                      <option value="earthquake">🏚️ Earthquake</option>
+                      <option value="landslide">⛰️ Landslide</option>
+                      <option value="cyclone">🌀 Cyclone</option>
+                      <option value="heatwave">☀️ Heatwave</option>
+                      <option value="medical">🚑 Medical Emergency</option>
+                      <option value="other">⚠️ Other</option>
+                    </select>
+                  </div>
+
+                  <div>
+                    <label className="block text-sm font-semibold text-gray-700 mb-1">Brief Description (optional)</label>
+                    <textarea
+                      value={sosForm.description}
+                      onChange={(e) => setSosForm((f) => ({ ...f, description: e.target.value }))}
+                      rows={2}
+                      placeholder="e.g. Water rising, people trapped on roof…"
+                      className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-red-500 focus:border-transparent resize-none"
+                    />
+                  </div>
+
+                  <div className="flex gap-3 pt-1">
+                    <button
+                      type="button"
+                      onClick={() => setShowSOSModal(false)}
+                      className="flex-1 py-3 border border-gray-300 rounded-lg font-semibold text-gray-700 hover:bg-gray-50"
+                    >
+                      Cancel
+                    </button>
+                    <button
+                      type="button"
+                      onClick={submitSOS}
+                      disabled={sosSubmitting || !sosForm.name.trim() || !sosForm.phone.trim() || !hasValidCoords}
+                      className="flex-1 py-3 bg-red-600 text-white rounded-lg font-bold hover:bg-red-700 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+                      title={!hasValidCoords ? "Location required — tap Share My Location or enter coordinates manually" : undefined}
+                    >
+                      {sosSubmitting ? (
+                        <><span className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" /> Sending…</>
+                      ) : (
+                        <><Send className="w-4 h-4" /> Send SOS</>
+                      )}
+                    </button>
+                  </div>
+                </div>
+              )}
+            </div>
+          </div>
+        )}
 
         {/* Report Incident Form */}
         <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-200 mb-6">

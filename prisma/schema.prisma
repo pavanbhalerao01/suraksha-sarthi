@@ -481,6 +481,48 @@ model SosAlert {
   @@index([disasterType])
 }
 
+// Team SOS Assignments - Links forwarded SOS from admin to a team
+model TeamSosAssignment {
+  id               String    @id @default(cuid())
+
+  // Original SOS reference
+  sosId            String    // e.g., "sos-001"
+  title            String
+  description      String
+  disasterType     String
+  severity         String    // 'LOW', 'HIGH', 'CRITICAL'
+  address          String
+  lat              Float?    // Victim latitude
+  lng              Float?    // Victim longitude
+  reporterName     String
+  reporterPhone    String
+  injuredCount     Int       @default(0)
+  affectedFamilies Int       @default(0)
+
+  // Team details
+  teamType         String    // 'ndrf', 'sdrf', 'fire', 'police', 'medical', 'civil-defense'
+  teamId           String    // e.g., "NDRF-001"
+  teamName         String    // e.g., "NDRF Field Team"
+
+  // Assignment metadata
+  assignedBy       String    @default("NDRF_ADMIN")
+  assignedAt       DateTime  @default(now())
+
+  // Status lifecycle
+  status           String    @default("ASSIGNED") // ASSIGNED | IN_PROGRESS | RESOLVED
+
+  responseStartedAt DateTime?
+  resolvedAt        DateTime?
+
+  createdAt         DateTime  @default(now())
+  updatedAt         DateTime  @updatedAt
+
+  @@index([teamType])
+  @@index([teamId])
+  @@index([status])
+  @@index([sosId])
+}
+
 // ML Predictions stored from Python backend
 model MLPrediction {
   id             String   @id @default(cuid())

@@ -1087,10 +1087,75 @@ function SOSTab({ onDispatch }: { onDispatch: () => void }) {
   const [alertResponse, setAlertResponse] = useState<any>(null);
   const [showAlertModal, setShowAlertModal] = useState(false);
   const [showForwardModal, setShowForwardModal] = useState(false);
-  const [selectedTeam, setSelectedTeam] = useState<string | null>(null);
+  // selectedTeam stores { id: teamType, name: displayName }
+  const [selectedTeam, setSelectedTeam] = useState<{ id: string; name: string } | null>(null);
   const [forwardingTeam, setForwardingTeam] = useState(false);
   const [dismissedSOSIds, setDismissedSOSIds] = useState<Set<string>>(new Set());
   const [dispatchedSOSIds, setDispatchedSOSIds] = useState<Set<string>>(new Set());
+  // Track forwarded SOS -> teamId mapping for display
+  const [forwardedMap, setForwardedMap] = useState<Record<string, { teamId: string; teamName: string }>>({});
+  // Blocked teams: { [teamType]: true }
+  const [blockedTeams, setBlockedTeams] = useState<Record<string, boolean>>({});
+  const [citizenSosList, setCitizenSosList] = useState<any[]>([]);
+
+  // Fetch blocked teams on mount and every 30s
+  useEffect(() => {
+    const fetchBlockedTeams = async () => {
+      try {
+        const res = await fetch("/api/sos/forward-to-team");
+        const data = await res.json();
+        if (data.success && data.blockedTeams) {
+          const blocked: Record<string, boolean> = {};
+          data.blockedTeams.forEach((t: { teamType: string }) => {
+            blocked[t.teamType] = true;
+          });
+          setBlockedTeams(blocked);
+        }
+      } catch {
+        // ignore
+      }
+    };
+    fetchBlockedTeams();
+    const interval = setInterval(fetchBlockedTeams, 30000);
+    return () => clearInterval(interval);
+  }, []);
+
+  // Fetch citizen SOS records from DB on mount and every 20s
+  useEffect(() => {
+    const fetchCitizenSOS = async () => {
+      try {
+        const res = await fetch("/api/citizen-sos");
+        const data = await res.json();
+        if (data.success && data.data) {
+          // Map DB fields to the shape sosList uses
+          const mapped = data.data.map((r: any) => ({
+            id: r.id,
+            title: `🌐 ${r.disasterType?.charAt(0).toUpperCase() + r.disasterType?.slice(1)} Emergency — ${r.name}`,
+            description: r.description || `Citizen SOS from ${r.name}. Contact: ${r.phone}`,
+            disasterType: r.disasterType || "other",
+            severity: r.severity || "HIGH",
+            address: r.address || (r.lat && r.lng ? `GPS: ${parseFloat(r.lat).toFixed(5)}, ${parseFloat(r.lng).toFixed(5)}` : "Location not provided"),
+            status: r.status || "UNVERIFIED",
+            reporter: r.name,
+            phone: r.phone,
+            lat: r.lat,
+            lng: r.lng,
+            ticketId: r.ticketId,
+            injuredCount: 0,
+            affectedFamilies: 0,
+            createdAt: r.createdAt,
+            source: "CITIZEN",
+          }));
+          setCitizenSosList(mapped);
+        }
+      } catch {
+        // ignore
+      }
+    };
+    fetchCitizenSOS();
+    const interval = setInterval(fetchCitizenSOS, 20000);
+    return () => clearInterval(interval);
+  }, []);
 
   const handleDispatchTeam = (sosId: string) => {
     if (dispatchedSOSIds.has(sosId)) return;
@@ -1201,21 +1266,68 @@ function SOSTab({ onDispatch }: { onDispatch: () => void }) {
     setSelectedTeam(null);
   };
 
-  // Function to forward SOS to selected team
+  // Function to forward SOS to selected team (calls real API)
   const confirmForwardSOS = async () => {
     if (!selectedSOS || !selectedTeam) return;
-    
+
     setForwardingTeam(true);
-    
+
     try {
-      // Simulate forwarding to team (you can integrate with backend later)
-      await new Promise(resolve => setTimeout(resolve, 1500));
-      
-      alert(`✅ SOS successfully forwarded to ${selectedTeam}\n\nIncident: ${selectedSOS.title}\nLocation: ${selectedSOS.address}\n\nThe team has been notified and will respond shortly.`);
-      
-      setShowForwardModal(false);
-      setSelectedSOS(null);
-      setSelectedTeam(null);
+      const response = await fetch("/api/sos/forward-to-team", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          sosId: selectedSOS.id,
+          title: selectedSOS.title,
+          description: selectedSOS.description,
+          disasterType: selectedSOS.disasterType,
+          severity: selectedSOS.severity,
+          address: selectedSOS.address,
+          lat: null,
+          lng: null,
+          reporterName: selectedSOS.reporter,
+          reporterPhone: selectedSOS.phone,
+          injuredCount: selectedSOS.injuredCount,
+          affectedFamilies: selectedSOS.affectedFamilies,
+          teamType: selectedTeam.id,
+          assignedBy: "NDRF_ADMIN",
+        }),
+      });
+
+      const data = await response.json();
+
+      if (data.success) {
+        // Track forwarded map so we can show the team ID on the SOS card
+        setForwardedMap((prev) => ({
+          ...prev,
+          [selectedSOS.id]: {
+            teamId: data.data.teamId,
+            teamName: data.data.teamName,
+          },
+        }));
+        setDispatchedSOSIds((prev) => new Set(prev).add(selectedSOS.id));
+        onDispatch();
+        setShowForwardModal(false);
+        setSelectedSOS(null);
+        setSelectedTeam(null);
+        // Refresh blocked teams
+        const blockedRes = await fetch("/api/sos/forward-to-team");
+        const blockedData = await blockedRes.json();
+        if (blockedData.success && blockedData.blockedTeams) {
+          const blocked: Record<string, boolean> = {};
+          blockedData.blockedTeams.forEach((t: { teamType: string }) => {
+            blocked[t.teamType] = true;
+          });
+          setBlockedTeams(blocked);
+        }
+        alert(
+          `✅ ${data.message}\n\nTeam ID: ${data.data.teamId}\nTeam: ${data.data.teamName}\nThis team is now visible in the Team POC Portal under Assigned Incidents.`
+        );
+      } else if (data.busy) {
+        alert(`⚠️ ${data.error}`);
+      } else {
+        alert(`❌ Failed to forward SOS: ${data.error}`);
+      }
     } catch (error) {
       console.error("Error forwarding SOS:", error);
       alert("Failed to forward SOS. Please try again.");
@@ -1224,10 +1336,35 @@ function SOSTab({ onDispatch }: { onDispatch: () => void }) {
     }
   };
 
-  // Function to mark SOS as false alert
-  const handleMarkAsFalse = (sosId: string) => {
-    if (confirm("Are you sure you want to mark this SOS as a false alert? This action will remove it from the list.")) {
-      setDismissedSOSIds(prev => new Set(prev).add(sosId));
+  // Function to mark SOS as false alert — permanently deletes from DB
+  const handleMarkAsFalse = async (sosId: string) => {
+    if (!confirm("Mark this SOS as a false alert? This will permanently delete it from the database.")) return;
+    try {
+      const res = await fetch(`/api/citizen-sos?id=${sosId}`, { method: "DELETE" });
+      const data = await res.json();
+      if (data.success) {
+        setCitizenSosList((prev) => prev.filter((s) => s.id !== sosId));
+      } else {
+        alert("Failed to delete: " + (data.error || "Unknown error"));
+      }
+    } catch {
+      alert("Failed to connect to server. Please try again.");
+    }
+  };
+
+  // Delete ALL SOS entries from DB (admin bulk clear)
+  const handleClearAllSOS = async () => {
+    if (!confirm("⚠️ Delete ALL SOS records permanently from the database? This cannot be undone.")) return;
+    try {
+      const res = await fetch("/api/citizen-sos?clearAll=true", { method: "DELETE" });
+      const data = await res.json();
+      if (data.success) {
+        setCitizenSosList([]);
+      } else {
+        alert("Failed: " + (data.error || "Unknown error"));
+      }
+    } catch {
+      alert("Failed to connect to server.");
     }
   };
 
@@ -1279,51 +1416,10 @@ function SOSTab({ onDispatch }: { onDispatch: () => void }) {
     }
   };
 
-  const sosList = [
-    {
-      id: "sos-001",
-      title: "Flooding in residential colony",
-      description:
-        "Water level rising rapidly. Multiple families trapped on rooftops.",
-      disasterType: "flood",
-      severity: "CRITICAL",
-      address: "Sector 5, Near Water Tank, Bhubaneswar",
-      status: "WARD_NOTIFIED",
-      reporter: "Priya Patel",
-      phone: "+91-9812345678",
-      injuredCount: 3,
-      affectedFamilies: 12,
-      createdAt: new Date(Date.now() - 8 * 60000).toISOString(),
-    },
-    {
-      id: "sos-002",
-      title: "Building collapse after tremors",
-      description: "Old building collapsed. Estimated 8-10 people trapped.",
-      disasterType: "earthquake",
-      severity: "HIGH",
-      address: "Main Bazaar Road, Old Town, Bhubaneswar",
-      status: "UNVERIFIED",
-      reporter: "Arun Singh",
-      phone: "+91-9812345679",
-      injuredCount: 8,
-      affectedFamilies: 4,
-      createdAt: new Date(Date.now() - 45 * 60000).toISOString(),
-    },
-    {
-      id: "sos-003",
-      title: "Fire in slum area",
-      description: "Large fire spreading. Medical assistance needed urgently.",
-      disasterType: "fire",
-      severity: "HIGH",
-      address: "Slum Area, Railway Station Road, Bhubaneswar",
-      status: "VERIFIED",
-      reporter: "Meena Devi",
-      phone: "+91-9812345680",
-      injuredCount: 5,
-      affectedFamilies: 30,
-      createdAt: new Date(Date.now() - 2 * 3600000).toISOString(),
-    },
-  ];
+  const sosList: any[] = [];
+
+  // Only live citizen SOS from DB
+  const allSosList = [...citizenSosList];
 
   const statusFilters = [
     "ALL",
@@ -1334,20 +1430,34 @@ function SOSTab({ onDispatch }: { onDispatch: () => void }) {
     "RESOLVED",
   ];
   
-  // Filter by status and remove dismissed SOSs
-  const filtered = (filter === "ALL" ? sosList : sosList.filter((s) => s.status === filter))
-    .filter((s) => !dismissedSOSIds.has(s.id));
+  // Filter by status
+  const filtered = filter === "ALL" ? allSosList : allSosList.filter((s) => s.status === filter);
 
   return (
     <div className="space-y-6">
-      <div>
-        <h2 className="text-2xl font-bold text-gray-900">
-          <Bell className="w-6 h-6 inline mr-2 text-amber-600" />
-          SOS Alerts &amp; Management
-        </h2>
-        <p className="text-gray-600 text-sm mt-1">
-          Full control over emergency reports • Verify and dispatch teams
-        </p>
+      <div className="flex items-start justify-between flex-wrap gap-3">
+        <div>
+          <h2 className="text-2xl font-bold text-gray-900">
+            <Bell className="w-6 h-6 inline mr-2 text-amber-600" />
+            SOS Alerts &amp; Management
+            {citizenSosList.length > 0 && (
+              <span className="ml-3 text-sm font-normal px-2.5 py-1 bg-red-100 text-red-700 border border-red-300 rounded-full animate-pulse">
+                🌐 {citizenSosList.length} Live from Citizens
+              </span>
+            )}
+          </h2>
+          <p className="text-gray-600 text-sm mt-1">
+            Full control over emergency reports • Verify and dispatch teams
+          </p>
+        </div>
+        {citizenSosList.length > 0 && (
+          <button
+            onClick={handleClearAllSOS}
+            className="px-4 py-2 bg-gray-700 text-white rounded-lg hover:bg-gray-800 transition text-sm font-medium flex items-center gap-2"
+          >
+            🗑️ Clear All Old Records
+          </button>
+        )}
       </div>
 
       {/* Workflow banner */}
@@ -1398,17 +1508,19 @@ function SOSTab({ onDispatch }: { onDispatch: () => void }) {
                 : "bg-white text-gray-700 border-gray-300 hover:border-blue-300"
             )}
           >
-            {f} {f !== "ALL" && `(${sosList.filter((s) => s.status === f).length})`}
+            {f} {f !== "ALL" && `(${allSosList.filter((s) => s.status === f).length})`}
           </button>
         ))}
       </div>
 
-      {/* SOS list */}
-      <div className="space-y-4">
+        <div className="space-y-4">
+        {filtered.length === 0 && (
+          <div className="text-center py-10 text-gray-500">No SOS records found. Live citizen SOS alerts will appear here automatically.</div>
+        )}
         {filtered.map((sos) => (
           <div
             key={sos.id}
-            className="bg-gray-50 p-5 rounded-lg border border-gray-200"
+            className={`p-5 rounded-lg border ${sos.source === "CITIZEN" ? "bg-red-50 border-red-200" : "bg-gray-50 border-gray-200"}`}
           >
             <div className="flex items-start gap-4">
               <span className="text-2xl">{getDisasterIcon(sos.disasterType)}</span>
@@ -1417,6 +1529,16 @@ function SOSTab({ onDispatch }: { onDispatch: () => void }) {
                   <span className="font-semibold text-gray-900">
                     {sos.title}
                   </span>
+                  {sos.source === "CITIZEN" && (
+                    <span className="text-xs px-2 py-1 bg-red-600 text-white rounded font-bold">
+                      🌐 CITIZEN
+                    </span>
+                  )}
+                  {sos.ticketId && (
+                    <span className="text-xs px-2 py-1 bg-gray-200 text-gray-700 rounded font-mono">
+                      {sos.ticketId}
+                    </span>
+                  )}
                   <span
                     className={cn(
                       "text-xs px-2 py-1 rounded border",
@@ -1443,6 +1565,11 @@ function SOSTab({ onDispatch }: { onDispatch: () => void }) {
                     <div className="text-sm font-medium text-gray-900">
                       {sos.address}
                     </div>
+                    {sos.lat && sos.lng && (
+                      <div className="text-xs text-blue-600 mt-0.5 font-mono">
+                        📍 {parseFloat(sos.lat).toFixed(5)}, {parseFloat(sos.lng).toFixed(5)}
+                      </div>
+                    )}
                   </div>
                   <div className="bg-white p-2 rounded border border-gray-200">
                     <div className="text-xs text-gray-500">
@@ -1470,12 +1597,24 @@ function SOSTab({ onDispatch }: { onDispatch: () => void }) {
                   </div>
                 </div>
                 <div className="flex gap-2 flex-wrap">
-                  <button 
-                    onClick={() => handleForwardSOS(sos)}
-                    className="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition text-sm font-medium flex items-center gap-2"
-                  >
-                    📤 Forward SOS
-                  </button>
+                  {forwardedMap[sos.id] ? (
+                    <div className="flex items-center gap-2 px-4 py-2 bg-green-100 border border-green-300 rounded-lg text-sm">
+                      <CheckCircle2 className="w-4 h-4 text-green-700" />
+                      <span className="text-green-800 font-semibold">
+                        Forwarded → {forwardedMap[sos.id].teamName}
+                      </span>
+                      <span className="ml-1 px-2 py-0.5 bg-green-600 text-white text-xs rounded font-mono font-bold">
+                        ID: {forwardedMap[sos.id].teamId}
+                      </span>
+                    </div>
+                  ) : (
+                    <button 
+                      onClick={() => handleForwardSOS(sos)}
+                      className="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition text-sm font-medium flex items-center gap-2"
+                    >
+                      📤 Forward SOS
+                    </button>
+                  )}
                   <button 
                     onClick={() => handleDispatchTeam(sos.id)}
                     disabled={dispatchedSOSIds.has(sos.id)}
@@ -1574,29 +1713,47 @@ function SOSTab({ onDispatch }: { onDispatch: () => void }) {
                 <h5 className="font-semibold text-gray-900 mb-3">🚨 Select Response Team:</h5>
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                   {[
-                    { id: 'fire', name: '🚒 Fire Department', desc: 'Fire, rescue operations' },
-                    { id: 'police', name: '👮 Police / Defense Team', desc: 'Security, crowd control' },
-                    { id: 'medical', name: '🚑 Medical / Ambulance', desc: 'Medical emergencies, injuries' },
-                    { id: 'ndrf', name: '🛡️ NDRF', desc: 'Disaster response force' },
-                    { id: 'civil', name: '🏛️ Civil Defense', desc: 'Civil protection, evacuation' },
-                    { id: 'power', name: '⚡ Power Department', desc: 'Electrical emergencies' },
-                    { id: 'water', name: '💧 Water & Sanitation', desc: 'Water supply, sanitation' },
-                    { id: 'forest', name: '🌲 Forest Department', desc: 'Forest fires, wildlife' },
-                  ].map((team) => (
-                    <button
-                      key={team.id}
-                      onClick={() => setSelectedTeam(team.name)}
-                      className={cn(
-                        "text-left p-4 rounded-lg border-2 transition-all",
-                        selectedTeam === team.name
-                          ? "border-green-600 bg-green-50"
-                          : "border-gray-200 bg-white hover:border-green-300 hover:bg-green-50"
-                      )}
-                    >
-                      <div className="font-semibold text-gray-900 mb-1">{team.name}</div>
-                      <div className="text-xs text-gray-600">{team.desc}</div>
-                    </button>
-                  ))}
+                    { id: 'ndrf', name: '🛡️ NDRF Field Team', desc: 'National disaster response force' },
+                    { id: 'sdrf', name: '🔷 SDRF Field Team', desc: 'State disaster response force' },
+                    { id: 'fire', name: '🚒 Fire Services', desc: 'Fire, rescue operations' },
+                    { id: 'police', name: '👮 Police Team', desc: 'Security, crowd control' },
+                    { id: 'medical', name: '🚑 Medical Emergency Team', desc: 'Medical emergencies, injuries' },
+                    { id: 'civil-defense', name: '🏛️ Civil Defense Team', desc: 'Civil protection, evacuation' },
+                    { id: 'relief-camp', name: '🏕️ Relief Camp Incharge', desc: 'Relief camp management, shelter' },
+                  ].map((team) => {
+                    const isBusy = blockedTeams[team.id];
+                    const isSelected = selectedTeam?.id === team.id;
+                    return (
+                      <button
+                        key={team.id}
+                        onClick={() => !isBusy && setSelectedTeam({ id: team.id, name: team.name })}
+                        disabled={isBusy}
+                        className={cn(
+                          "text-left p-4 rounded-lg border-2 transition-all relative",
+                          isBusy
+                            ? "border-red-200 bg-red-50 opacity-70 cursor-not-allowed"
+                            : isSelected
+                            ? "border-green-600 bg-green-50"
+                            : "border-gray-200 bg-white hover:border-green-300 hover:bg-green-50"
+                        )}
+                      >
+                        <div className="font-semibold text-gray-900 mb-1 flex items-center gap-2">
+                          {team.name}
+                          {isBusy && (
+                            <span className="ml-auto px-2 py-0.5 bg-red-600 text-white text-xs rounded-full font-bold">
+                              BUSY
+                            </span>
+                          )}
+                        </div>
+                        <div className="text-xs text-gray-600">{team.desc}</div>
+                        {isBusy && (
+                          <div className="text-xs text-red-600 mt-1 font-medium">
+                            Team currently responding to an incident
+                          </div>
+                        )}
+                      </button>
+                    );
+                  })}
                 </div>
               </div>
 
@@ -1604,7 +1761,10 @@ function SOSTab({ onDispatch }: { onDispatch: () => void }) {
                 <div className="bg-green-50 border border-green-200 rounded-lg p-4">
                   <p className="text-sm text-green-800 flex items-center gap-2">
                     <CheckCircle2 className="w-4 h-4" />
-                    <span>Selected team: <strong>{selectedTeam}</strong></span>
+                    <span>Selected team: <strong>{selectedTeam.name}</strong></span>
+                  </p>
+                  <p className="text-xs text-green-700 mt-1">
+                    A unique Team ID will be generated and displayed to both admin and the team portal.
                   </p>
                 </div>
               )}
