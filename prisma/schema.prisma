@@ -443,6 +443,45 @@ model Resource {
   @@index([regionId])
 }
 
+// Resource Requests from Relief Camps/Authorities to NGOs
+model ResourceRequest {
+  id                String              @id @default(cuid())
+  
+  // Request Details
+  resourceType      String              // 'Food Supplies', 'Medical Supplies', 'Shelter Material'
+  quantity          String              // '500 packets', '100 tents'
+  urgency           String              // 'low', 'medium', 'high', 'urgent'
+  location          String              // Delivery location or relief camp
+  description       String?             // Additional details
+  
+  // Requester Details
+  requestedBy       String              // 'NDRF Command', 'District Collector', 'Relief Camp Incharge'
+  requestedByUserId String?             // User ID if authenticated
+  requestedByTeam   String?             // Team type (relief-camp, ndrf, collector)
+  
+  // Status Tracking
+  status            String              @default("pending") // 'pending', 'responded', 'fulfilled', 'cancelled'
+  
+  // Response Details (when NGO responds)
+  respondedByNgoId  String?             
+  deliveryPercentage Int?               // Percentage of requested quantity (0-100)
+  deliveryMethod    String?             // 'deliver' or 'pickup'
+  deliveryLocation  String?             // Relief camp name or pickup coordinates
+  estimatedDeliveryTime String?         // Time estimate
+  notes             String?             // Additional notes from NGO
+  respondedAt       DateTime?
+  
+  fulfilledAt       DateTime?           // When marked as delivered/fulfilled
+  
+  createdAt         DateTime            @default(now())
+  updatedAt         DateTime            @updatedAt
+  
+  @@index([status])
+  @@index([requestedByUserId])
+  @@index([respondedByNgoId])
+  @@index([createdAt])
+}
+
 // SOS Alerts sent to volunteers
 model SosAlert {
   id                String      @id @default(cuid())

@@ -121,6 +121,8 @@ export default function ActionTeamPage() {
   const [onDuty, setOnDuty] = useState(false);
   const [showResourceRequest, setShowResourceRequest] = useState(false);
   const [resourceRequests, setResourceRequests] = useState<any[]>([]);
+  const [ngoResponses, setNgoResponses] = useState<any[]>([]);
+  const [loadingResources, setLoadingResources] = useState(false);
   const [showPhotoUpload, setShowPhotoUpload] = useState(false);
   const [showEvacueeForm, setShowEvacueeForm] = useState(false);
   const [uploadedPhotos, setUploadedPhotos] = useState<string[]>([]);
@@ -131,6 +133,63 @@ export default function ActionTeamPage() {
   const [showHazardReport, setShowHazardReport] = useState(false);
   const teamId = `${teamType}_${Math.random().toString(36).substr(2, 9)}`;
   const trackingId = useRef(`${teamType}_${Math.random().toString(36).substr(2, 9)}`).current;
+
+  // Real-time resource request tracking for relief camps
+  useEffect(() => {
+    if (teamType === 'relief-camp') {
+      // Fetch resource requests submitted by this relief camp
+      const fetchResourceStatus = async () => {
+        try {
+          const response = await fetch('/api/resources/requests?requestedByTeam=relief-camp');
+          const data = await response.json();
+          if (data.success) {
+            setResourceRequests(data.requests.filter((r: any) => r.status === 'pending'));
+            setNgoResponses(data.requests.filter((r: any) => r.status === 'responded'));
+          }
+        } catch (error) {
+          console.error('Error fetching resource status:', error);
+        }
+      };
+
+      fetchResourceStatus();
+      // Poll every 5 seconds for real-time updates
+      const interval = setInterval(fetchResourceStatus, 5000);
+      return () => clearInterval(interval);
+    }
+  }, [teamType]);
+
+  // Submit resource request to API
+  const submitResourceRequest = async (resourceType: string, quantity: string, urgency: string, description?: string) => {
+    setLoadingResources(true);
+    try {
+      const response = await fetch('/api/resources/requests', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          resourceType,
+          quantity,
+          urgency,
+          location: reliefCampData.campName,
+          description,
+          requestedBy: 'Relief Camp Incharge',
+          requestedByTeam: 'relief-camp'
+        })
+      });
+
+      const data = await response.json();
+      if (data.success) {
+        alert(`✅ Resource request submitted successfully!\n\nRequest ID: ${data.request.id}\nNGOs will be notified immediately.`);
+        setShowResourceRequest(false);
+      } else {
+        alert('Failed to submit request. Please try again.');
+      }
+    } catch (error) {
+      console.error('Error submitting resource request:', error);
+      alert('Failed to submit request. Please check your connection.');
+    } finally {
+      setLoadingResources(false);
+    }
+  };
 
   // DB assignments (SOS forwarded from admin)
   const [dbAssignments, setDbAssignments] = useState<any[]>([]);
@@ -381,17 +440,8 @@ export default function ActionTeamPage() {
     setFacilities(updated);
   };
 
-  const handleResourceRequest = (item: string, quantity: number, priority: string) => {
-    const newRequest = {
-      id: `REQ-${Date.now()}`,
-      item,
-      quantity,
-      priority,
-      timestamp: new Date().toLocaleString(),
-      status: "Pending"
-    };
-    setResourceRequests([...resourceRequests, newRequest]);
-    setShowResourceRequest(false);
+  const handleResourceRequest = async (resourceType: string, quantity: string, urgency: string, description?: string) => {
+    await submitResourceRequest(resourceType, quantity, urgency, description);
   };
 
   const handlePhotoUpload = (files: FileList | null) => {
@@ -1075,8 +1125,9 @@ export default function ActionTeamPage() {
                 const formData = new FormData(e.currentTarget);
                 handleResourceRequest(
                   formData.get('item') as string,
-                  Number(formData.get('quantity')),
-                  formData.get('priority') as string
+                  formData.get('quantity') as string,
+                  formData.get('priority') as string,
+                  formData.get('description') as string || undefined
                 );
               }}>
                 <div className="space-y-4">

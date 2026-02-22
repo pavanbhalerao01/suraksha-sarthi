@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import Link from "next/link";
 import { 
   Package, 
@@ -28,6 +28,20 @@ export default function NGOPortal() {
   const [deliveryMethod, setDeliveryMethod] = useState<'deliver' | 'pickup'>('deliver');
   const [selectedCamp, setSelectedCamp] = useState('');
   const [userLocation, setUserLocation] = useState<{lat: number, lng: number} | null>(null);
+  
+  // Real-time data from API
+  const [pendingRequests, setPendingRequests] = useState<any[]>([]);
+  const [ongoingContributions, setOngoingContributions] = useState<any[]>([]);
+  const [contributionHistory, setContributionHistory] = useState<any[]>([]);
+  const [stats, setStats] = useState({
+    totalContributions: 0,
+    peopleHelped: 0,
+    ongoingContributions: 0
+  });
+  const [loading, setLoading] = useState(true);
+
+  // Mock NGO ID - in production, get from auth session
+  const ngoId = "ngo-demo-001";
 
   // Relief camps data
   const reliefCamps = [
@@ -44,64 +58,147 @@ export default function NGOPortal() {
     registrationNo: "80G/12A-2020-MH",
     contactPerson: "Priya Sharma",
     isVerified: true,
-    resourcesContributed: 245,
-    peopleHelped: 1850,
-    activeContributions: 12
   };
 
-  const contributedResources = [
-    {
-      id: 1,
-      type: "Food Packets",
-      quantity: 1000,
-      location: "Pune Warehouse",
-      status: "delivered",
-      allocatedTo: "Sinhagad Road Relief Camp",
-      contributedDate: "2 days ago",
-      impact: "500 people fed"
-    },
-    {
-      id: 2,
-      type: "Medical Supplies",
-      quantity: 50,
-      location: "Deccan Medical Store",
-      status: "allocated",
-      allocatedTo: "NDRF Team Alpha",
-      contributedDate: "1 day ago",
-      impact: "Pending deployment"
-    },
-    {
-      id: 3,
-      type: "Blankets",
-      quantity: 200,
-      location: "Kothrud Office",
-      status: "available",
-      allocatedTo: null,
-      contributedDate: "3 hours ago",
-      impact: "Ready for allocation"
+  // Fetch pending requests from API
+  const fetchPendingRequests = async () => {
+    try {
+      const response = await fetch('/api/resources/requests?status=pending');
+      const data = await response.json();
+      if (data.success) {
+        setPendingRequests(data.requests);
+      }
+    } catch (error) {
+      console.error('Error fetching requests:', error);
     }
-  ];
+  };
 
-  const coordinationRequests = [
-    {
-      id: 1,
-      type: "Food Supplies",
-      requestedBy: "NDRF Command",
-      quantity: "500 packets",
-      urgency: "high",
-      location: "Multiple Relief Camps",
-      requestDate: "2 hours ago"
-    },
-    {
-      id: 2,
-      type: "Temporary Shelter Material",
-      requestedBy: "District Collector",
-      quantity: "100 tents",
-      urgency: "urgent",
-      location: "Flood-affected areas",
-      requestDate: "30 min ago"
+  // Fetch NGO contributions
+  const fetchContributions = async () => {
+    try {
+      const response = await fetch(`/api/ngo/contributions?ngoId=${ngoId}`);
+      const data = await response.json();
+      if (data.success) {
+        setStats(data.stats);
+        setOngoingContributions(data.ongoing);
+        setContributionHistory(data.history);
+      }
+    } catch (error) {
+      console.error('Error fetching contributions:', error);
     }
-  ];
+  };
+
+  // Initial fetch
+  useEffect(() => {
+    const loadData = async () => {
+      setLoading(true);
+      await Promise.all([fetchPendingRequests(), fetchContributions()]);
+      setLoading(false);
+    };
+    loadData();
+  }, []);
+
+  // Real-time polling every 5 seconds
+  useEffect(() => {
+    const interval = setInterval(() => {
+      fetchPendingRequests();
+      fetchContributions();
+    }, 5000);
+
+    return () => clearInterval(interval);
+  }, []);
+
+  // Handle response submission
+  const handleConfirmResponse = async (e: React.FormEvent) => {
+    e.preventDefault();
+    
+    try {
+      let locationInfo = '';
+      if (deliveryMethod === 'deliver') {
+        const camp = reliefCamps.find(c => c.id.toString() === selectedCamp);
+        if (!camp) {
+          alert('Please select a relief camp');
+          return;
+        }
+        locationInfo = camp.name;
+      } else {
+        if (!userLocation) {
+          alert('Please grant location access');
+          return;
+        }
+        locationInfo = `${userLocation.lat.toFixed(6)}, ${userLocation.lng.toFixed(6)}`;
+      }
+
+      const response = await fetch('/api/resources/respond', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          requestId: selectedRequest.id,
+          ngoId,
+          deliveryPercentage,
+          deliveryMethod,
+          deliveryLocation: locationInfo,
+          estimatedDeliveryTime: '2-4 hours', // Can be made dynamic
+          notes: `${deliveryPercentage}% of requested quantity will be delivered`
+        })
+      });
+
+      const data = await response.json();
+      
+      if (data.success) {
+        alert(
+          `✅ Response Submitted Successfully!\n\n` +
+          `Resource: ${selectedRequest.resourceType}\n` +
+          `Delivering: ${deliveryPercentage}% of requested quantity\n` +
+          `${deliveryMethod === 'deliver' ? `To: ${locationInfo}` : `Pickup from: ${locationInfo}`}\n\n` +
+          `Your response has been sent to ${selectedRequest.requestedBy}.`
+        );
+        
+        // Refresh data immediately
+        await Promise.all([fetchPendingRequests(), fetchContributions()]);
+        setShowResponseModal(false);
+      } else {
+        alert('Failed to submit response. Please try again.');
+      }
+    } catch (error) {
+      console.error('Error submitting response:', error);
+      alert('Error submitting response. Please try again.');
+    }
+  };
+
+  const handleGrantLocation = () => {
+    if (navigator.geolocation) {
+      navigator.geolocation.getCurrentPosition(
+        (position) => {
+          setUserLocation({
+            lat: position.coords.latitude,
+            lng: position.coords.longitude
+          });
+          alert(`✅ Location Granted!\nLat: ${position.coords.latitude.toFixed(6)}\nLng: ${position.coords.longitude.toFixed(6)}`);
+        },
+        (error) => {
+          alert('❌ Failed to get location. Please enable location services.');
+          console.error('Geolocation error:', error);
+        }
+      );
+    } else {
+      alert('❌ Geolocation is not supported by your browser');
+    }
+  };
+
+  const getTimeAgo = (dateString: string) => {
+    const date = new Date(dateString);
+    const now = new Date();
+    const diffMs = now.getTime() - date.getTime();
+    const diffMins = Math.floor(diffMs / 60000);
+    const diffHours = Math.floor(diffMins / 60);
+    const diffDays = Math.floor(diffHours / 24);
+    
+    if (diffMins < 1) return 'Just now';
+    if (diffMins < 60) return `${diffMins} min ago`;
+    if (diffHours < 24) return `${diffHours} hour${diffHours > 1 ? 's' : ''} ago`;
+    return `${diffDays} day${diffDays > 1 ? 's' : ''} ago`;
+  };
 
   return (
     <div className="min-h-screen bg-gray-50">
@@ -139,6 +236,13 @@ export default function NGOPortal() {
       </header>
 
       <div className="max-w-7xl mx-auto px-4 py-6">
+        {/* Loading State */}
+        {loading && (
+          <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 mb-6 text-center">
+            <p className="text-blue-800 font-medium">🔄 Loading live data from database...</p>
+          </div>
+        )}
+
         {/* Quick Stats */}
         <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
           <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-200">
@@ -146,7 +250,7 @@ export default function NGOPortal() {
               <span className="text-gray-600 text-sm">Total Contributions</span>
               <Package className="w-5 h-5 text-orange-600" />
             </div>
-            <div className="text-3xl font-bold text-gray-900">{ngoData.resourcesContributed}</div>
+            <div className="text-3xl font-bold text-gray-900">{stats.totalContributions}</div>
           </div>
 
           <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-200">
@@ -154,15 +258,15 @@ export default function NGOPortal() {
               <span className="text-gray-600 text-sm">People Helped</span>
               <Heart className="w-5 h-5 text-red-600" />
             </div>
-            <div className="text-3xl font-bold text-gray-900">{ngoData.peopleHelped.toLocaleString()}</div>
+            <div className="text-3xl font-bold text-gray-900">{Math.round(stats.peopleHelped).toLocaleString()}</div>
           </div>
 
           <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-200">
             <div className="flex items-center justify-between mb-2">
-              <span className="text-gray-600 text-sm">Active Resources</span>
+              <span className="text-gray-600 text-sm">Ongoing Contributions</span>
               <TrendingUp className="w-5 h-5 text-green-600" />
             </div>
-            <div className="text-3xl font-bold text-gray-900">{ngoData.activeContributions}</div>
+            <div className="text-3xl font-bold text-gray-900">{stats.ongoingContributions}</div>
           </div>
 
           <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-200">
@@ -175,118 +279,161 @@ export default function NGOPortal() {
           </div>
         </div>
 
-        {/* Coordination Requests */}
+        {/* Coordination Requests - LIVE */}
         <div className="bg-gradient-to-br from-orange-600 to-orange-700 p-6 rounded-xl shadow-lg mb-6 text-white">
-          <div className="flex items-center gap-3 mb-4">
-            <AlertCircle className="w-6 h-6" />
-            <h2 className="text-xl font-bold">Resource Requests from Authorities</h2>
+          <div className="flex items-center justify-between mb-4">
+            <div className="flex items-center gap-3">
+              <AlertCircle className="w-6 h-6" />
+              <h2 className="text-xl font-bold">Resource Requests from Authorities</h2>
+            </div>
+            <div className="flex items-center gap-2 bg-white bg-opacity-20 px-3 py-1 rounded-full">
+              <div className="w-2 h-2 bg-green-400 rounded-full animate-pulse"></div>
+              <span className="text-sm font-medium">Live</span>
+            </div>
           </div>
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            {coordinationRequests.map((request) => (
-              <div key={request.id} className="bg-white bg-opacity-20 backdrop-blur p-4 rounded-lg">
-                <div className="flex items-start justify-between mb-2">
-                  <div>
-                    <h3 className="font-bold text-lg">{request.type}</h3>
-                    <p className="text-orange-100 text-sm">by {request.requestedBy}</p>
+          
+          {pendingRequests.length === 0 ? (
+            <div className="bg-white bg-opacity-20 backdrop-blur p-6 rounded-lg text-center">
+              <p className="text-lg">✅ No pending requests at the moment</p>
+              <p className="text-sm text-orange-100 mt-2">New requests will appear here in real-time</p>
+            </div>
+          ) : (
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              {pendingRequests.map((request) => (
+                <div key={request.id} className="bg-white bg-opacity-20 backdrop-blur p-4 rounded-lg">
+                  <div className="flex items-start justify-between mb-2">
+                    <div>
+                      <h3 className="font-bold text-lg">{request.resourceType}</h3>
+                      <p className="text-orange-100 text-sm">by {request.requestedBy}</p>
+                    </div>
+                    <span className={`px-2 py-1 rounded text-xs font-bold ${
+                      request.urgency === 'urgent' 
+                        ? 'bg-red-600' 
+                        : request.urgency === 'high'
+                        ? 'bg-orange-800'
+                        : 'bg-orange-600'
+                    }`}>
+                      {request.urgency.toUpperCase()}
+                    </span>
                   </div>
-                  <span className={`px-2 py-1 rounded text-xs font-bold ${
-                    request.urgency === 'urgent' 
-                      ? 'bg-red-600' 
-                      : 'bg-orange-800'
-                  }`}>
-                    {request.urgency.toUpperCase()}
-                  </span>
+                  <div className="space-y-1 text-sm mb-3">
+                    <p>📦 Quantity: <strong>{request.quantity}</strong></p>
+                    <p>📍 Location: {request.location}</p>
+                    <p>🕐 {getTimeAgo(request.createdAt)}</p>
+                  </div>
+                  <button 
+                    onClick={() => {
+                      setSelectedRequest(request);
+                      setDeliveryPercentage(100);
+                      setDeliveryMethod('deliver');
+                      setSelectedCamp('');
+                      setUserLocation(null);
+                      setShowResponseModal(true);
+                    }}
+                    className="w-full px-4 py-2 bg-white text-orange-600 rounded-lg font-semibold hover:bg-orange-50 transition flex items-center justify-center gap-2"
+                  >
+                    <Send className="w-4 h-4" />
+                    Respond to Request
+                  </button>
                 </div>
-                <div className="space-y-1 text-sm mb-3">
-                  <p>📦 Quantity: <strong>{request.quantity}</strong></p>
-                  <p>📍 Location: {request.location}</p>
-                  <p>🕐 {request.requestDate}</p>
-                </div>
-                <button 
-                  onClick={() => {
-                    setSelectedRequest(request);
-                    setDeliveryPercentage(100);
-                    setDeliveryMethod('deliver');
-                    setSelectedCamp('');
-                    setUserLocation(null);
-                    setShowResponseModal(true);
-                  }}
-                  className="w-full px-4 py-2 bg-white text-orange-600 rounded-lg font-semibold hover:bg-orange-50 transition flex items-center justify-center gap-2"
-                >
-                  <Send className="w-4 h-4" />
-                  Respond to Request
-                </button>
-              </div>
-            ))}
-          </div>
+              ))}
+            </div>
+          )}
         </div>
 
         {/* Main Content Grid */}
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-          {/* Contributed Resources */}
+          {/* Ongoing Contributions */}
           <div className="lg:col-span-2 bg-white p-6 rounded-xl shadow-sm border border-gray-200">
             <div className="flex items-center justify-between mb-4">
-              <h2 className="text-lg font-bold text-gray-900">Your Resource Contributions</h2>
-              <span className="px-3 py-1 bg-orange-100 text-orange-800 rounded-full text-xs font-medium">
-                {contributedResources.length} Active
+              <h2 className="text-lg font-bold text-gray-900">Ongoing Contributions</h2>
+              <span className="px-3 py-1 bg-blue-100 text-blue-800 rounded-full text-xs font-medium">
+                {ongoingContributions.length} Active
               </span>
             </div>
             
-            <div className="space-y-4">
-              {contributedResources.map((resource) => (
-                <div 
-                  key={resource.id} 
-                  className={`border-l-4 p-4 rounded-lg ${
-                    resource.status === 'delivered' 
-                      ? 'border-green-600 bg-green-50' 
-                      : resource.status === 'allocated'
-                      ? 'border-blue-600 bg-blue-50'
-                      : 'border-orange-600 bg-orange-50'
-                  }`}
-                >
-                  <div className="flex items-start justify-between mb-2">
-                    <div className="flex-1">
-                      <h3 className="font-bold text-gray-900 mb-1">{resource.type}</h3>
-                      <div className="flex items-center gap-4 text-sm text-gray-600 mb-2">
-                        <span>📦 Qty: <strong>{resource.quantity}</strong></span>
-                        <span className="flex items-center gap-1">
-                          <MapPin className="w-4 h-4" />
-                          {resource.location}
-                        </span>
-                      </div>
-                      {resource.allocatedTo && (
+            {ongoingContributions.length === 0 ? (
+              <div className="text-center py-8 text-gray-500">
+                <Package className="w-12 h-12 mx-auto mb-2 opacity-50" />
+                <p>No ongoing contributions</p>
+                <p className="text-sm mt-1">Respond to requests above to start helping!</p>
+              </div>
+            ) : (
+              <div className="space-y-4">
+                {ongoingContributions.map((contribution) => (
+                  <div 
+                    key={contribution.id} 
+                    className="border-l-4 border-blue-600 bg-blue-50 p-4 rounded-lg"
+                  >
+                    <div className="flex items-start justify-between mb-2">
+                      <div className="flex-1">
+                        <h3 className="font-bold text-gray-900 mb-1">{contribution.resourceType}</h3>
+                        <div className="flex items-center gap-4 text-sm text-gray-600 mb-2">
+                          <span>📦 Qty: <strong>{contribution.quantity}</strong></span>
+                          <span>✅ Delivering: <strong>{contribution.deliveryPercentage}%</strong></span>
+                        </div>
                         <p className="text-sm text-gray-700 mb-1">
-                          🎯 Allocated to: <strong>{resource.allocatedTo}</strong>
+                          {contribution.deliveryMethod === 'deliver' ? '🚚' : '📍'} {contribution.deliveryLocation}
                         </p>
-                      )}
-                      <div className="flex items-center gap-4 text-xs text-gray-700">
-                        <span className="flex items-center gap-1">
-                          <Clock className="w-3 h-3" />
-                          {resource.contributedDate}
+                        <p className="text-sm text-gray-700 mb-1">
+                          🏢 Requested by: <strong>{contribution.requestedBy}</strong>
+                        </p>
+                        <div className="flex items-center gap-4 text-xs text-gray-700">
+                          <span className="flex items-center gap-1">
+                            <Clock className="w-3 h-3" />
+                            Responded {getTimeAgo(contribution.respondedAt)}
+                          </span>
+                          <span>⏱️ ETA: {contribution.estimatedDeliveryTime}</span>
+                        </div>
+                      </div>
+                      <span className="px-3 py-1 rounded-full text-xs font-bold uppercase ml-3 bg-blue-600 text-white">
+                        IN PROGRESS
+                      </span>
+                    </div>
+                    {contribution.notes && (
+                      <div className="mt-3 pt-3 border-t border-blue-200">
+                        <p className="text-blue-700 text-sm">📝 {contribution.notes}</p>
+                      </div>
+                    )}
+                  </div>
+                ))}
+              </div>
+            )}
+
+            {/* Contribution History */}
+            {contributionHistory.length > 0 && (
+              <>
+                <div className="flex items-center justify-between mt-8 mb-4">
+                  <h2 className="text-lg font-bold text-gray-900">Contribution History</h2>
+                  <span className="px-3 py-1 bg-green-100 text-green-800 rounded-full text-xs font-medium">
+                    {contributionHistory.length} Completed
+                  </span>
+                </div>
+                
+                <div className="space-y-3">
+                  {contributionHistory.slice(0, 5).map((contribution) => (
+                    <div 
+                      key={contribution.id} 
+                      className="border-l-4 border-green-600 bg-green-50 p-3 rounded-lg"
+                    >
+                      <div className="flex items-start justify-between">
+                        <div className="flex-1">
+                          <h3 className="font-semibold text-gray-900 text-sm mb-1">{contribution.resourceType}</h3>
+                          <div className="flex items-center gap-3 text-xs text-gray-600">
+                            <span>📦 {contribution.quantity}</span>
+                            <span>✅ {contribution.deliveryPercentage}%</span>
+                            <span>{contribution.deliveryLocation}</span>
+                          </div>
+                        </div>
+                        <span className="text-xs text-green-700 font-medium">
+                          ✓ {getTimeAgo(contribution.fulfilledAt || contribution.respondedAt)}
                         </span>
-                        <span>💪 Impact: {resource.impact}</span>
                       </div>
                     </div>
-                    <span className={`px-3 py-1 rounded-full text-xs font-bold uppercase ml-3 ${
-                      resource.status === 'delivered'
-                        ? 'bg-green-600 text-white'
-                        : resource.status === 'allocated'
-                        ? 'bg-blue-600 text-white'
-                        : 'bg-orange-600 text-white'
-                    }`}>
-                      {resource.status}
-                    </span>
-                  </div>
-                  {resource.status === 'delivered' && (
-                    <div className="mt-3 pt-3 border-t border-green-200">
-                      <p className="text-green-700 text-sm font-medium">
-                        ✓ Delivery confirmed • View impact report →
-                      </p>
-                    </div>
-                  )}
+                  ))}
                 </div>
-              ))}
-            </div>
+              </>
+            )}
           </div>
 
           {/* Impact Dashboard & Quick Actions */}
@@ -372,7 +519,7 @@ export default function NGOPortal() {
         {/* Response to Request Modal */}
         {showResponseModal && selectedRequest && (
           <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
-            <div className="bg-white rounded-xl p-6 max-w-md w-full">
+            <div className="bg-white rounded-xl p-6 max-w-md w-full max-h-[90vh] overflow-y-auto">
               {/* Modal Header */}
               <div className="flex items-center justify-between mb-4">
                 <h2 className="text-xl font-bold text-gray-900">Respond to Request</h2>
@@ -401,28 +548,7 @@ export default function NGOPortal() {
                 </div>
               </div>
 
-              <form onSubmit={(e) => {
-                e.preventDefault();
-                const deliveryAmount = Math.round(parseInt(selectedRequest.quantity) * deliveryPercentage / 100);
-                
-                let locationInfo = '';
-                if (deliveryMethod === 'deliver') {
-                  const camp = reliefCamps.find(c => c.id.toString() === selectedCamp);
-                  locationInfo = `Delivering to: ${camp?.name || 'Selected Camp'}`;
-                } else {
-                  locationInfo = `Pickup from NGO location ${userLocation ? `(${userLocation.lat.toFixed(4)}, ${userLocation.lng.toFixed(4)})` : '(Location granted)'}`;
-                }
-                
-                alert(
-                  `✅ Response Submitted Successfully!\n\n` +
-                  `Resource: ${selectedRequest.type}\n` +
-                  `Delivering: ${deliveryAmount} units (${deliveryPercentage}% of requested)\n` +
-                  `${locationInfo}\n\n` +
-                  `Your response has been sent to ${selectedRequest.requestedBy}.\n` +
-                  `Response ID: RES-${Date.now().toString(36).toUpperCase()}`
-                );
-                setShowResponseModal(false);
-              }} className="space-y-5">
+              <form onSubmit={handleConfirmResponse} className="space-y-5">
                 
                 {/* Delivery Percentage Slider */}
                 <div>
@@ -550,24 +676,7 @@ export default function NGOPortal() {
                           {deliveryMethod === 'pickup' && (
                             <button
                               type="button"
-                              onClick={() => {
-                                if (navigator.geolocation) {
-                                  navigator.geolocation.getCurrentPosition(
-                                    (position) => {
-                                      setUserLocation({
-                                        lat: position.coords.latitude,
-                                        lng: position.coords.longitude
-                                      });
-                                      alert('✓ Location granted successfully!\n\nLogistics team will be notified of your location for pickup.');
-                                    },
-                                    (error) => {
-                                      alert('❌ Unable to get location. Please enable location services.');
-                                    }
-                                  );
-                                } else {
-                                  alert('❌ Geolocation is not supported by your browser.');
-                                }
-                              }}
+                              onClick={handleGrantLocation}
                               className={`w-full px-4 py-2 rounded-lg font-medium transition flex items-center justify-center gap-2 text-sm ${
                                 userLocation 
                                   ? 'bg-green-600 text-white hover:bg-green-700' 
