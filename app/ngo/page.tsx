@@ -15,7 +15,9 @@ import {
   Truck,
   Heart,
   X,
-  Send
+  Send,
+  Navigation2,
+  Locate
 } from "lucide-react";
 
 export default function NGOPortal() {
@@ -23,7 +25,18 @@ export default function NGOPortal() {
   const [showResponseModal, setShowResponseModal] = useState(false);
   const [selectedRequest, setSelectedRequest] = useState<any>(null);
   const [deliveryPercentage, setDeliveryPercentage] = useState(100);
-  const [deliveryLocation, setDeliveryLocation] = useState('');
+  const [deliveryMethod, setDeliveryMethod] = useState<'deliver' | 'pickup'>('deliver');
+  const [selectedCamp, setSelectedCamp] = useState('');
+  const [userLocation, setUserLocation] = useState<{lat: number, lng: number} | null>(null);
+
+  // Relief camps data
+  const reliefCamps = [
+    { id: 1, name: "Sinhagad Road Relief Camp", address: "Sinhagad Road, Pune", coords: "18.4574,73.8574" },
+    { id: 2, name: "Deccan Gymkhana Camp", address: "Fergusson College Road, Pune", coords: "18.5204,73.8567" },
+    { id: 3, name: "Kothrud Emergency Center", address: "Paud Road, Kothrud, Pune", coords: "18.5074,73.8077" },
+    { id: 4, name: "Hadapsar Relief Station", address: "Hadapsar, Pune", coords: "18.5089,73.9260" },
+    { id: 5, name: "Wakad Disaster Hub", address: "Wakad, Pimpri-Chinchwad", coords: "18.5979,73.7624" },
+  ];
 
   // Mock NGO data
   const ngoData = {
@@ -193,7 +206,9 @@ export default function NGOPortal() {
                   onClick={() => {
                     setSelectedRequest(request);
                     setDeliveryPercentage(100);
-                    setDeliveryLocation('');
+                    setDeliveryMethod('deliver');
+                    setSelectedCamp('');
+                    setUserLocation(null);
                     setShowResponseModal(true);
                   }}
                   className="w-full px-4 py-2 bg-white text-orange-600 rounded-lg font-semibold hover:bg-orange-50 transition flex items-center justify-center gap-2"
@@ -389,11 +404,20 @@ export default function NGOPortal() {
               <form onSubmit={(e) => {
                 e.preventDefault();
                 const deliveryAmount = Math.round(parseInt(selectedRequest.quantity) * deliveryPercentage / 100);
+                
+                let locationInfo = '';
+                if (deliveryMethod === 'deliver') {
+                  const camp = reliefCamps.find(c => c.id.toString() === selectedCamp);
+                  locationInfo = `Delivering to: ${camp?.name || 'Selected Camp'}`;
+                } else {
+                  locationInfo = `Pickup from NGO location ${userLocation ? `(${userLocation.lat.toFixed(4)}, ${userLocation.lng.toFixed(4)})` : '(Location granted)'}`;
+                }
+                
                 alert(
                   `✅ Response Submitted Successfully!\n\n` +
                   `Resource: ${selectedRequest.type}\n` +
                   `Delivering: ${deliveryAmount} units (${deliveryPercentage}% of requested)\n` +
-                  `Delivery Location: ${deliveryLocation}\n\n` +
+                  `${locationInfo}\n\n` +
                   `Your response has been sent to ${selectedRequest.requestedBy}.\n` +
                   `Response ID: RES-${Date.now().toString(36).toUpperCase()}`
                 );
@@ -434,25 +458,133 @@ export default function NGOPortal() {
                   </div>
                 </div>
 
-                {/* Delivery Location */}
+                {/* Delivery Method Selection */}
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">
-                    Delivery Location <span className="text-red-600">*</span>
+                  <label className="block text-sm font-medium text-gray-700 mb-3">
+                    Delivery Method <span className="text-red-600">*</span>
                   </label>
-                  <div className="relative">
-                    <MapPin className="absolute left-3 top-1/2 transform -translate-y-1/2 w-5 h-5 text-gray-400" />
-                    <input 
-                      type="text"
-                      value={deliveryLocation}
-                      onChange={(e) => setDeliveryLocation(e.target.value)}
-                      className="w-full pl-11 pr-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-orange-500 focus:border-orange-500 outline-none"
-                      placeholder="Enter full delivery address"
-                      required
-                    />
+                  
+                  {/* Radio Options */}
+                  <div className="space-y-3">
+                    {/* Option 1: Deliver to Camp */}
+                    <div 
+                      onClick={() => setDeliveryMethod('deliver')}
+                      className={`border-2 rounded-lg p-4 cursor-pointer transition ${
+                        deliveryMethod === 'deliver' 
+                          ? 'border-orange-500 bg-orange-50' 
+                          : 'border-gray-200 hover:border-gray-300'
+                      }`}
+                    >
+                      <div className="flex items-start gap-3">
+                        <input 
+                          type="radio" 
+                          name="deliveryMethod" 
+                          value="deliver"
+                          checked={deliveryMethod === 'deliver'}
+                          onChange={(e) => e.target.checked && setDeliveryMethod('deliver')}
+                          className="mt-1 w-4 h-4 text-orange-600 accent-orange-600"
+                        />
+                        <div className="flex-1">
+                          <div className="font-semibold text-gray-900 mb-1">I will deliver to relief camp</div>
+                          <p className="text-sm text-gray-600 mb-3">Select destination camp and get directions</p>
+                          
+                          {deliveryMethod === 'deliver' && (
+                            <div className="space-y-2">
+                              <select 
+                                value={selectedCamp}
+                                onChange={(e) => setSelectedCamp(e.target.value)}
+                                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-orange-500 outline-none text-sm"
+                                required={deliveryMethod === 'deliver'}
+                              >
+                                <option value="">Select Relief Camp</option>
+                                {reliefCamps.map(camp => (
+                                  <option key={camp.id} value={camp.id}>
+                                    {camp.name} - {camp.address}
+                                  </option>
+                                ))}
+                              </select>
+                              
+                              {selectedCamp && (
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    const camp = reliefCamps.find(c => c.id.toString() === selectedCamp);
+                                    if (camp) {
+                                      window.open(`https://www.google.com/maps/dir/?api=1&destination=${camp.coords}`, '_blank');
+                                    }
+                                  }}
+                                  className="w-full px-4 py-2 bg-blue-600 text-white rounded-lg font-medium hover:bg-blue-700 transition flex items-center justify-center gap-2 text-sm"
+                                >
+                                  <Navigation2 className="w-4 h-4" />
+                                  Open in Google Maps
+                                </button>
+                              )}
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Option 2: Request Pickup */}
+                    <div 
+                      onClick={() => setDeliveryMethod('pickup')}
+                      className={`border-2 rounded-lg p-4 cursor-pointer transition ${
+                        deliveryMethod === 'pickup' 
+                          ? 'border-orange-500 bg-orange-50' 
+                          : 'border-gray-200 hover:border-gray-300'
+                      }`}
+                    >
+                      <div className="flex items-start gap-3">
+                        <input 
+                          type="radio" 
+                          name="deliveryMethod" 
+                          value="pickup"
+                          checked={deliveryMethod === 'pickup'}
+                          onChange={(e) => e.target.checked && setDeliveryMethod('pickup')}
+                          className="mt-1 w-4 h-4 text-orange-600 accent-orange-600"
+                        />
+                        <div className="flex-1">
+                          <div className="font-semibold text-gray-900 mb-1">Request logistics team to pick up</div>
+                          <p className="text-sm text-gray-600 mb-3">Grant your location for pickup coordination</p>
+                          
+                          {deliveryMethod === 'pickup' && (
+                            <button
+                              type="button"
+                              onClick={() => {
+                                if (navigator.geolocation) {
+                                  navigator.geolocation.getCurrentPosition(
+                                    (position) => {
+                                      setUserLocation({
+                                        lat: position.coords.latitude,
+                                        lng: position.coords.longitude
+                                      });
+                                      alert('✓ Location granted successfully!\n\nLogistics team will be notified of your location for pickup.');
+                                    },
+                                    (error) => {
+                                      alert('❌ Unable to get location. Please enable location services.');
+                                    }
+                                  );
+                                } else {
+                                  alert('❌ Geolocation is not supported by your browser.');
+                                }
+                              }}
+                              className={`w-full px-4 py-2 rounded-lg font-medium transition flex items-center justify-center gap-2 text-sm ${
+                                userLocation 
+                                  ? 'bg-green-600 text-white hover:bg-green-700' 
+                                  : 'bg-orange-600 text-white hover:bg-orange-700'
+                              }`}
+                            >
+                              <Locate className="w-4 h-4" />
+                              {userLocation 
+                                ? `✓ Location Granted (${userLocation.lat.toFixed(4)}, ${userLocation.lng.toFixed(4)})` 
+                                : 'Grant Location Access'
+                              }
+                            </button>
+                          )}
+                        </div>
+                      </div>
+                    </div>
                   </div>
-                  <p className="text-xs text-gray-500 mt-1">
-                    💡 Provide detailed address including district and landmarks
-                  </p>
                 </div>
 
                 {/* Estimated Delivery Time */}
