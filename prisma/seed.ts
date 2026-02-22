@@ -334,7 +334,6 @@ async function main() {
 
   console.log('✅ Created sample infrastructure');
 
-<<<<<<< HEAD
   // ============================================================================
   // DEMO ACCOUNTS (Authentication System)
   // ============================================================================

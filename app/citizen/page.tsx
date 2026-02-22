@@ -247,7 +247,7 @@ export default function CitizenPortal() {
 
         {activeTab === "sos" && (
         <>
-        {/* Emergency SOS Buttons Grid */}}
+        {/* Emergency SOS Buttons Grid */}
         <div className="grid md:grid-cols-2 gap-6 mb-6">
           {/* General Emergency SOS */}
           <div className="bg-gradient-to-br from-red-600 to-red-700 p-6 rounded-2xl shadow-2xl text-white">
