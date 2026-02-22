@@ -13,11 +13,17 @@ import {
   FileText,
   Upload,
   Truck,
-  Heart
+  Heart,
+  X,
+  Send
 } from "lucide-react";
 
 export default function NGOPortal() {
   const [showDonationForm, setShowDonationForm] = useState(false);
+  const [showResponseModal, setShowResponseModal] = useState(false);
+  const [selectedRequest, setSelectedRequest] = useState<any>(null);
+  const [deliveryPercentage, setDeliveryPercentage] = useState(100);
+  const [deliveryLocation, setDeliveryLocation] = useState('');
 
   // Mock NGO data
   const ngoData = {
@@ -183,7 +189,16 @@ export default function NGOPortal() {
                   <p>📍 Location: {request.location}</p>
                   <p>🕐 {request.requestDate}</p>
                 </div>
-                <button className="w-full px-4 py-2 bg-white text-orange-600 rounded-lg font-semibold hover:bg-orange-50 transition">
+                <button 
+                  onClick={() => {
+                    setSelectedRequest(request);
+                    setDeliveryPercentage(100);
+                    setDeliveryLocation('');
+                    setShowResponseModal(true);
+                  }}
+                  className="w-full px-4 py-2 bg-white text-orange-600 rounded-lg font-semibold hover:bg-orange-50 transition flex items-center justify-center gap-2"
+                >
+                  <Send className="w-4 h-4" />
                   Respond to Request
                 </button>
               </div>
@@ -338,6 +353,159 @@ export default function NGOPortal() {
             </div>
           </div>
         </div>
+
+        {/* Response to Request Modal */}
+        {showResponseModal && selectedRequest && (
+          <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
+            <div className="bg-white rounded-xl p-6 max-w-md w-full">
+              {/* Modal Header */}
+              <div className="flex items-center justify-between mb-4">
+                <h2 className="text-xl font-bold text-gray-900">Respond to Request</h2>
+                <button 
+                  onClick={() => setShowResponseModal(false)}
+                  className="p-1 hover:bg-gray-100 rounded transition"
+                >
+                  <X className="w-5 h-5 text-gray-500" />
+                </button>
+              </div>
+
+              {/* Request Details */}
+              <div className="bg-orange-50 p-4 rounded-lg mb-6 border border-orange-200">
+                <h3 className="font-bold text-gray-900 mb-2">{selectedRequest.type}</h3>
+                <div className="space-y-1 text-sm text-gray-700">
+                  <p>📦 Requested: <strong>{selectedRequest.quantity}</strong></p>
+                  <p>🏢 By: <strong>{selectedRequest.requestedBy}</strong></p>
+                  <p>📍 Target: {selectedRequest.location}</p>
+                  <p className={`inline-block px-2 py-1 rounded text-xs font-bold mt-2 ${
+                    selectedRequest.urgency === 'urgent' 
+                      ? 'bg-red-100 text-red-800' 
+                      : 'bg-orange-200 text-orange-900'
+                  }`}>
+                    {selectedRequest.urgency.toUpperCase()} PRIORITY
+                  </p>
+                </div>
+              </div>
+
+              <form onSubmit={(e) => {
+                e.preventDefault();
+                const deliveryAmount = Math.round(parseInt(selectedRequest.quantity) * deliveryPercentage / 100);
+                alert(
+                  `✅ Response Submitted Successfully!\n\n` +
+                  `Resource: ${selectedRequest.type}\n` +
+                  `Delivering: ${deliveryAmount} units (${deliveryPercentage}% of requested)\n` +
+                  `Delivery Location: ${deliveryLocation}\n\n` +
+                  `Your response has been sent to ${selectedRequest.requestedBy}.\n` +
+                  `Response ID: RES-${Date.now().toString(36).toUpperCase()}`
+                );
+                setShowResponseModal(false);
+              }} className="space-y-5">
+                
+                {/* Delivery Percentage Slider */}
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-3">
+                    How much can you deliver?
+                  </label>
+                  <div className="bg-gray-50 p-4 rounded-lg border border-gray-200">
+                    <div className="flex items-center justify-between mb-3">
+                      <span className="text-2xl font-bold text-orange-600">{deliveryPercentage}%</span>
+                      <span className="text-sm text-gray-600">
+                        ≈ {Math.round(parseInt(selectedRequest.quantity) * deliveryPercentage / 100)} units
+                      </span>
+                    </div>
+                    <input 
+                      type="range" 
+                      min="0" 
+                      max="100" 
+                      step="5"
+                      value={deliveryPercentage}
+                      onChange={(e) => setDeliveryPercentage(parseInt(e.target.value))}
+                      className="w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer accent-orange-600"
+                      style={{
+                        background: `linear-gradient(to right, #ea580c 0%, #ea580c ${deliveryPercentage}%, #e5e7eb ${deliveryPercentage}%, #e5e7eb 100%)`
+                      }}
+                    />
+                    <div className="flex justify-between text-xs text-gray-500 mt-2">
+                      <span>0%</span>
+                      <span>25%</span>
+                      <span>50%</span>
+                      <span>75%</span>
+                      <span>100%</span>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Delivery Location */}
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    Delivery Location <span className="text-red-600">*</span>
+                  </label>
+                  <div className="relative">
+                    <MapPin className="absolute left-3 top-1/2 transform -translate-y-1/2 w-5 h-5 text-gray-400" />
+                    <input 
+                      type="text"
+                      value={deliveryLocation}
+                      onChange={(e) => setDeliveryLocation(e.target.value)}
+                      className="w-full pl-11 pr-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-orange-500 focus:border-orange-500 outline-none"
+                      placeholder="Enter full delivery address"
+                      required
+                    />
+                  </div>
+                  <p className="text-xs text-gray-500 mt-1">
+                    💡 Provide detailed address including district and landmarks
+                  </p>
+                </div>
+
+                {/* Estimated Delivery Time */}
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    Estimated Delivery Time
+                  </label>
+                  <select 
+                    className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-orange-500 outline-none"
+                    required
+                  >
+                    <option value="">Select timeframe</option>
+                    <option value="immediate">Within 2 hours (Immediate)</option>
+                    <option value="today">Within today</option>
+                    <option value="tomorrow">By tomorrow</option>
+                    <option value="2-3days">2-3 days</option>
+                    <option value="week">Within a week</option>
+                  </select>
+                </div>
+
+                {/* Additional Notes */}
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    Additional Notes (Optional)
+                  </label>
+                  <textarea 
+                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-orange-500 outline-none"
+                    rows={3}
+                    placeholder="Any special conditions, vehicle details, contact person..."
+                  ></textarea>
+                </div>
+
+                {/* Action Buttons */}
+                <div className="flex gap-3 pt-2">
+                  <button 
+                    type="submit"
+                    className="flex-1 px-6 py-3 bg-orange-600 text-white rounded-lg font-semibold hover:bg-orange-700 transition flex items-center justify-center gap-2"
+                  >
+                    <Truck className="w-5 h-5" />
+                    Confirm Response
+                  </button>
+                  <button 
+                    type="button"
+                    onClick={() => setShowResponseModal(false)}
+                    className="px-6 py-3 bg-gray-200 text-gray-700 rounded-lg font-semibold hover:bg-gray-300 transition"
+                  >
+                    Cancel
+                  </button>
+                </div>
+              </form>
+            </div>
+          </div>
+        )}
 
         {/* Donation Form Modal */}
         {showDonationForm && (
