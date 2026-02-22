@@ -209,6 +209,22 @@ export default function PortalSelectionPage() {
     setIsLoading(true);
     
     try {
+      if (authMode === 'team') {
+        // For team/admin portals, use super admin credentials
+        const response = await fetch('/api/auth/login', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ email: 'super@survive.exe', password: 'super' }),
+        });
+        const data = await response.json();
+        if (!response.ok) throw new Error(data.error || 'Demo login failed');
+        console.log('✅ Team demo login successful!', data);
+        closeAuthModal();
+        router.push(targetRoute);
+        return;
+      }
+      
+      // For citizen portal, use phone-based demo login
       const demoPhone = phone || '+919999999999'; // Use entered phone or default
       const demoName = userName || 'Demo User';
       
@@ -938,7 +954,7 @@ export default function PortalSelectionPage() {
                   
                   <div className="mt-4 p-3 bg-blue-50 rounded-lg">
                     <p className="text-xs text-blue-800">
-                      <strong>Demo Account:</strong> admin@survive.exe / SuperAdmin@2026!
+                      <strong>Demo Account:</strong> super@survive.exe / super
                     </p>
                   </div>
                 </form>

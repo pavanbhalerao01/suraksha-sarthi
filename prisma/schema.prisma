@@ -165,6 +165,13 @@ enum UserRole {
   EVACUEE         // People in relief camps
 }
 
+enum UserStatus {
+  pending
+  active
+  suspended
+  deleted
+}
+
 enum VolunteerStatus {
   PENDING         // Registration submitted
   VERIFIED        // Ward office verified
@@ -198,8 +205,10 @@ model User {
   email             String   @unique
   phone             String?  @unique
   passwordHash      String
+  password_hash     String?  @map("password_hash")
   
-  role              String  // NDRF_ADMIN, COLLECTOR, CITIZEN, VOLUNTEER, NGO
+  role              UserRole  // NDRF_ADMIN, COLLECTOR, CITIZEN, VOLUNTEER, NGO
+  status            UserStatus @default(active)
   name              String
   
   isActive          Boolean  @default(true)

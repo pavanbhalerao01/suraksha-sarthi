@@ -113,14 +113,15 @@ export async function POST(request: NextRequest) {
     // Store session
     const tokenHash = hashToken(token);
     const expiresAt = getExpiryDate(8);
+    const userAgent = request.headers.get('user-agent') || 'unknown';
+    const ipAddress = request.headers.get('x-forwarded-for') || request.headers.get('x-real-ip') || 'unknown';
     
     await prisma.session.create({
       data: {
         userId: user.id,
-        tokenHash,
+        token: tokenHash,
+        deviceInfo: `${userAgent} | ${ipAddress}`,
         expiresAt,
-        ipAddress: request.headers.get('x-forwarded-for') || request.headers.get('x-real-ip') || 'unknown',
-        userAgent: request.headers.get('user-agent') || 'unknown',
       },
     });
     
