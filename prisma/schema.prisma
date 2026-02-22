@@ -10,40 +10,6 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
-// ============================================================================
-// ENUMS
-// ============================================================================
-
-enum UserRole {
-  NDRF_ADMIN
-  COLLECTOR
-  CITIZEN
-  VOLUNTEER
-  NGO
-  EVACUEE
-  // New roles added for action teams
-  NDRF
-  SDRF
-  FIRE
-  POLICE
-  MEDICAL
-  AMBULANCE
-  CIVIL_DEFENSE
-  RELIEF_CAMP
-  SUPER_ADMIN
-}
-
-enum UserStatus {
-  pending
-  active
-  suspended
-  rejected
-}
-
-// ============================================================================
-// MODELS
-// ============================================================================
-
 // Regions (Districts, Talukas, Wards)
 model Region {
   id            String   @id @default(cuid())
@@ -190,6 +156,15 @@ model WeatherData {
 
 // ==================== MULTI-USER SYSTEM ====================
 
+enum UserRole {
+  NDRF_ADMIN      // Full access to coordination dashboard
+  COLLECTOR       // District Collector view-only + direct NDRF communication
+  CITIZEN         // SOS and incident reporting
+  VOLUNTEER       // Task assignment and check-in
+  NGO             // Resource contribution and tracking
+  EVACUEE         // People in relief camps
+}
+
 enum VolunteerStatus {
   PENDING         // Registration submitted
   VERIFIED        // Ward office verified
@@ -219,60 +194,38 @@ enum TaskStatus {
 
 // User accounts with role-based access
 model User {
-  id                String      @id @default(cuid())
-  email             String      @unique
-  phone             String?     @unique
-  passwordHash      String      // Original column (required)
-  password_hash     String?     @map("password_hash") // New auth column (nullable for citizens)
+  id                String   @id @default(cuid())
+  email             String   @unique
+  phone             String?  @unique
+  passwordHash      String
+  
+  role              String  // NDRF_ADMIN, COLLECTOR, CITIZEN, VOLUNTEER, NGO
+  name              String
+  
+  isActive          Boolean  @default(true)
+  lastLogin         DateTime?
 
-  
-role              UserRole    // CITIZEN, VOLUNTEER, NDRF, etc.
-  name              String      // Original column name
-  isActive          Boolean     @default(true) // Original column
-  status            UserStatus? // New column (nullable for compatibility)
-  
-<<<<<<< HEAD
-  lastLogin         DateTime?   // Original column
-  createdAt         DateTime    @default(now()) // Original column
-  updatedAt         DateTime    @updatedAt // Original column
-  
-  // OTP verification (for citizens) - NEW COLUMNS ADDED
-  // OTP fields (comprehensive)
-  otpCode           String?     @map("otp_code")
-  otpExpiresAt      DateTime?   @map("otp_expires_at")
-  otpAttempts       Int         @default(0) @map("otp_attempts")
-  otpLastSentAt     DateTime?   @map("otp_last_sent_at")
-  
-  // Additional OTP fields
+  // OTP fields
   otp              String?
   otpExpires       DateTime?
   
-  // Activity tracking
-  isActive          Boolean  @default(true)
-  lastLogin         DateTime?
-  
-  // Validation (for action teams)
-  validatedBy       String?     @map("validated_by")
-  validatedAt       DateTime?   @map("validated_at")
-  
   // Relationships
   profile           UserProfile?
-  teamProfile       TeamProfile?
   sessions          Session[]
   incidentsReported Incident[]  @relation("ReportedBy")
   incidentsAssigned Incident[]  @relation("AssignedTo")
   volunteerProfile  Volunteer?
   ngoProfile        NGO?
+  teamProfile       TeamProfile?
   validationQueue   ValidationQueue[]  @relation("ValidationUser")
   validatedUsers    ValidationQueue[]  @relation("ValidationReviewer")
   auditLogs         AuditLog[]
   
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+  
   @@index([email])
-  @@index([phone])
   @@index([role])
-  @@index([status])
-  @@index([otpExpiresAt])
-  @@map("User")
 }
 
 // Extended user profiles
@@ -310,25 +263,17 @@ model UserProfile {
 // Authentication sessions
 model Session {
   id              String   @id @default(cuid())
-  userId          String   @map("user_id")
+  userId          String
   user            User     @relation(fields: [userId], references: [id], onDelete: Cascade)
   
-  // Token Details
-  tokenHash       String   @unique @map("token_hash") // SHA-256 hash of JWT token
-  expiresAt       DateTime @map("expires_at")
+  token           String   @unique
+  deviceInfo      String?  // Browser, OS, IP
   
-  // Device & Security
-  ipAddress       String?  @map("ip_address")
-  userAgent       String?  @map("user_agent")
-  
-  // Timestamps
-  createdAt       DateTime @default(now()) @map("created_at")
-  lastActivity    DateTime @default(now()) @map("last_activity")
+  expiresAt       DateTime
+  createdAt       DateTime @default(now())
   
   @@index([userId])
-  @@index([tokenHash])
-  @@index([expiresAt])
-  @@map("Session")
+  @@index([token])
 }
 
 // Incidents reported by citizens or detected by system
@@ -540,36 +485,100 @@ model SosAlert {
   @@index([disasterType])
 }
 
-// ============================================================================
-// AUTHENTICATION MODELS - Added for comprehensive auth system
-// ============================================================================
+// Team SOS Assignments - Links forwarded SOS from admin to a team
+model TeamSosAssignment {
+  id               String    @id @default(cuid())
+
+  // Original SOS reference
+  sosId            String    // e.g., "sos-001"
+  title            String
+  description      String
+  disasterType     String
+  severity         String    // 'LOW', 'HIGH', 'CRITICAL'
+  address          String
+  lat              Float?    // Victim latitude
+  lng              Float?    // Victim longitude
+  reporterName     String
+  reporterPhone    String
+  injuredCount     Int       @default(0)
+  affectedFamilies Int       @default(0)
+
+  // Team details
+  teamType         String    // 'ndrf', 'sdrf', 'fire', 'police', 'medical', 'civil-defense'
+  teamId           String    // e.g., "NDRF-001"
+  teamName         String    // e.g., "NDRF Field Team"
+
+  // Assignment metadata
+  assignedBy       String    @default("NDRF_ADMIN")
+  assignedAt       DateTime  @default(now())
+
+  // Status lifecycle
+  status           String    @default("ASSIGNED") // ASSIGNED | IN_PROGRESS | RESOLVED
+
+  responseStartedAt DateTime?
+  resolvedAt        DateTime?
+
+  createdAt         DateTime  @default(now())
+  updatedAt         DateTime  @updatedAt
+
+  @@index([teamType])
+  @@index([teamId])
+  @@index([status])
+  @@index([sosId])
+}
+
+// ML Predictions stored from Python backend
+model MLPrediction {
+  id             String   @id @default(cuid())
+  type           String   // 'cyclone', 'flood', 'heatwave'
+  state          String
+  district       String
+  severity       String   // 'LOW', 'MEDIUM', 'HIGH', 'CRITICAL'
+  confidence     Float    // 0-100
+  predictedDate  String
+  affectedArea   String?
+  affectedPeople String?
+  description    String?
+  model          String?  // ML model name used
+  lat            Float?
+  lon            Float?
+  fetchedAt      DateTime @default(now())
+
+  @@index([type])
+  @@index([severity])
+  @@index([fetchedAt])
+}
+
+// ===========================================================================
+// AUTHENTICATION MODELS - from development branch
+// ===========================================================================
 
 // Team Profile - Extended details for action teams (NDRF, SDRF, Fire, Police, etc.)
 model TeamProfile {
   id                      String    @id @default(cuid())
   userId                  String    @unique @map("user_id")
   user                    User      @relation(fields: [userId], references: [id], onDelete: Cascade)
-  
+
   // Team Details
-  teamType                String    @map("team_type") // ndrf sdrf, fire, police, medical, ambulance, civil_defense
+  teamType                String    @map("team_type") // ndrf, sdrf, fire, police, medical, ambulance, civil_defense
   teamId                  String?   @map("team_id") // Official team ID (e.g., NDRF-MH-01)
   badgeNumber             String?   @map("badge_number") // Officer badge number
   department              String?   // Department name
   district                String?   // Operating district
   state                   String    @default("Maharashtra")
-  
+
   // Skills & Verification
   specializations         String[]  // JSON array: ["flood_rescue", "medical_first_aid", "search_rescue"]
   verificationDocumentUrl String?   @map("verification_document_url") // Uploaded ID proof / badge scan URL
-  
+
   // Duty Status
   onDuty                  Boolean   @default(false) @map("on_duty")
   lastDutyToggle          DateTime? @map("last_duty_toggle")
-  
+
   // Timestamps
   createdAt               DateTime  @default(now()) @map("created_at")
   updatedAt               DateTime  @updatedAt @map("updated_at")
-  
+
   @@index([userId])
   @@index([teamType])
   @@index([district])
@@ -582,20 +591,20 @@ model ValidationQueue {
   id                String    @id @default(cuid())
   userId            String    @map("user_id")
   user              User      @relation("ValidationUser", fields: [userId], references: [id], onDelete: Cascade)
-  
+
   // Request Details
   requestedRole     String    @map("requested_role") // Role they want to register as
   status            String    @default("pending") // pending, approved, rejected
   documents         Json?     // Uploaded documents: {id_proof: url, badge: url, dept_letter: url}
   notes             String?   // Applicant's notes/justification
-  
+
   // Review Details
   submittedAt       DateTime  @default(now()) @map("submitted_at")
   reviewedBy        String?   @map("reviewed_by")
   reviewer          User?     @relation("ValidationReviewer", fields: [reviewedBy], references: [id])
   reviewedAt        DateTime? @map("reviewed_at")
   rejectionReason   String?   @map("rejection_reason") // Reason for rejection
-  
+
   @@index([status])
   @@index([userId])
   @@index([submittedAt])
@@ -607,20 +616,20 @@ model AuditLog {
   id            String   @id @default(cuid())
   userId        String?  @map("user_id")
   user          User?    @relation(fields: [userId], references: [id], onDelete: SetNull)
-  
+
   // Action Details
   action        String   // LOGIN, LOGOUT, REGISTER, VALIDATE_USER, UPDATE_STATUS, etc.
   entityType    String?  @map("entity_type") // user, team_profile, incident, resource
   entityId      String?  @map("entity_id") // ID of affected entity
   details       Json?    // Additional context: {old_value, new_value, reason}
-  
+
   // Security Context
   ipAddress     String?  @map("ip_address")
   userAgent     String?  @map("user_agent")
-  
+
   // Timestamp
   createdAt     DateTime @default(now()) @map("created_at")
-  
+
   @@index([userId])
   @@index([action])
   @@index([createdAt])

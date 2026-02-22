@@ -1,6 +1,7 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
+import dynamic from "next/dynamic";
 import Link from "next/link";
 import { useParams } from "next/navigation";
 import { 
@@ -22,10 +23,53 @@ import {
   Truck,
   Phone,
   Users,
-  Package
+  Package,
+  X,
+  ExternalLink,
+  User,
+  Loader2,
+  RefreshCw,
 } from "lucide-react";
 import { useGeolocation, formatCoordinates, shareLocation } from "@/lib/useGeolocation";
 import { geocodeLandmark, getLandmarkSuggestions, PUNE_LANDMARKS } from "@/lib/geocoding";
+
+// ── Helper: extract GPS coords from address strings like "GPS: 18.53, 73.86" ──
+function parseGpsFromAddress(text: string): { lat: number; lng: number } | null {
+  if (!text) return null;
+  const m = text.match(/(-?\d{1,3}\.\d+)[,\s]+(-?\d{1,3}\.\d+)/);
+  if (m) return { lat: parseFloat(m[1]), lng: parseFloat(m[2]) };
+  return null;
+}
+
+// ── Leaflet route map inside Navigate modal ──
+function RouteLeafletMap({ from, to }: { from: { lat: number; lng: number } | null; to: { lat: number; lng: number } }) {
+  const mapRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (!mapRef.current) return;
+    let mapInstance: any = null;
+    import("leaflet").then((L) => {
+      import("leaflet/dist/leaflet.css" as any);
+      const container = mapRef.current!;
+      if ((container as any)._leaflet_id) (L as any).DomUtil.empty(container);
+      const points: [number, number][] = from
+        ? [[from.lat, from.lng], [to.lat, to.lng]]
+        : [[to.lat, to.lng]];
+      mapInstance = (L as any).map(container).fitBounds(points, { padding: [40, 40] });
+      (L as any).tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
+        attribution: "© OpenStreetMap contributors",
+      }).addTo(mapInstance);
+      if (from) {
+        (L as any).circleMarker([from.lat, from.lng], { radius: 10, color: "#2563eb", fillColor: "#3b82f6", fillOpacity: 0.9 })
+          .bindPopup("Your Location").addTo(mapInstance);
+        (L as any).polyline(points, { color: "#2563eb", weight: 3, dashArray: "8 6" }).addTo(mapInstance);
+      }
+      (L as any).circleMarker([to.lat, to.lng], { radius: 12, color: "#dc2626", fillColor: "#ef4444", fillOpacity: 0.9 })
+        .bindPopup("Victim Location").addTo(mapInstance);
+    });
+    return () => { if (mapInstance) mapInstance.remove(); };
+  }, [from, to]);
+  return <div ref={mapRef} className="w-full h-72 rounded-lg overflow-hidden" />;
+}
 
 const teamConfig = {
   ndrf: {
@@ -86,6 +130,15 @@ export default function ActionTeamPage() {
   const [showIncidentUpload, setShowIncidentUpload] = useState(false);
   const [showHazardReport, setShowHazardReport] = useState(false);
   const teamId = `${teamType}_${Math.random().toString(36).substr(2, 9)}`;
+  const trackingId = useRef(`${teamType}_${Math.random().toString(36).substr(2, 9)}`).current;
+
+  // DB assignments (SOS forwarded from admin)
+  const [dbAssignments, setDbAssignments] = useState<any[]>([]);
+  const [loadingAssignments, setLoadingAssignments] = useState(false);
+  const [startingResponseId, setStartingResponseId] = useState<string | null>(null);
+  const [showNavigateModal, setShowNavigateModal] = useState(false);
+  const [navigateTarget, setNavigateTarget] = useState<any>(null);
+  const [completingId, setCompletingId] = useState<string | null>(null);
   
   // Medical team specific states
   const [patients, setPatients] = useState([
@@ -2765,6 +2818,55 @@ export default function ActionTeamPage() {
     );
   }
 
+  // Fetch DB assignments from admin
+  const fetchAssignments = async () => {
+    setLoadingAssignments(true);
+    try {
+      const res = await fetch(`/api/sos/team-assignments?teamType=${teamType}`);
+      const data = await res.json();
+      if (data.success) setDbAssignments(data.assignments || []);
+    } catch { /* ignore */ } finally {
+      setLoadingAssignments(false);
+    }
+  };
+
+  useEffect(() => {
+    fetchAssignments();
+    const interval = setInterval(fetchAssignments, 30000);
+    return () => clearInterval(interval);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [teamType]);
+
+  const handleStartResponse = async (id: string) => {
+    setStartingResponseId(id);
+    try {
+      const res = await fetch(`/api/sos/team-assignments/${id}/start-response`, { method: "PATCH" });
+      const data = await res.json();
+      if (data.success) {
+        setDbAssignments(prev => prev.map(a => a.id === id ? { ...a, status: "IN_PROGRESS" } : a));
+      } else {
+        alert("Failed to start response: " + data.error);
+      }
+    } catch { alert("Network error."); } finally {
+      setStartingResponseId(null);
+    }
+  };
+
+  const handleMarkCompleted = async (id: string) => {
+    setCompletingId(id);
+    try {
+      const res = await fetch(`/api/sos/team-assignments/${id}/start-response`, { method: "PUT" });
+      const data = await res.json();
+      if (data.success) {
+        setDbAssignments(prev => prev.filter(a => a.id !== id));
+      } else {
+        alert("Failed to mark completed: " + data.error);
+      }
+    } catch { alert("Network error."); } finally {
+      setCompletingId(null);
+    }
+  };
+
   // Regular Field Team Dashboard
   return (
     <div className="min-h-screen bg-gray-50">
@@ -2876,7 +2978,95 @@ export default function ActionTeamPage() {
           </div>
         </div>
 
-        {/* Main Content Grid */}
+        {/* ━━━━━ Live SOS Assignments from Admin ━━━━━ */}
+        {dbAssignments.length > 0 && (
+          <div className="bg-white rounded-xl shadow-sm border-2 border-red-200 p-5 mb-6">
+            <div className="flex items-center justify-between mb-4">
+              <h2 className="text-lg font-bold text-gray-900 flex items-center gap-2">
+                <AlertCircle className="w-5 h-5 text-red-600" />
+                🚨 Live SOS Assignments ({dbAssignments.length})
+              </h2>
+              <button onClick={() => fetchAssignments()} className="text-sm text-blue-600 hover:underline flex items-center gap-1">
+                <RefreshCw className="w-3.5 h-3.5" /> Refresh
+              </button>
+            </div>
+            <div className="space-y-4">
+              {dbAssignments.map((a) => {
+                const isInProgress = a.status === "IN_PROGRESS";
+                return (
+                  <div key={a.id} className={`border-l-4 p-4 rounded-lg ${
+                    a.severity === "CRITICAL" ? "border-red-600 bg-red-50" :
+                    a.severity === "HIGH" ? "border-orange-500 bg-orange-50" :
+                    "border-yellow-500 bg-yellow-50"
+                  }`}>
+                    <div className="flex items-start justify-between mb-2">
+                      <div>
+                        <div className="flex items-center gap-2 mb-1">
+                          <span className={`px-2 py-0.5 rounded text-xs font-bold uppercase ${
+                            a.severity === "CRITICAL" ? "bg-red-600 text-white" : "bg-orange-500 text-white"
+                          }`}>{a.severity}</span>
+                          <span className="text-xs font-mono text-gray-500">{a.sosId}</span>
+                          {isInProgress && <span className="px-2 py-0.5 bg-blue-100 text-blue-700 rounded text-xs font-medium">IN PROGRESS</span>}
+                        </div>
+                        <h3 className="font-bold text-gray-900">{a.title}</h3>
+                        <p className="text-sm text-gray-600 mt-0.5">{a.description}</p>
+                        <div className="flex items-center gap-3 text-xs text-gray-500 mt-1">
+                          <span className="flex items-center gap-1"><MapPin className="w-3 h-3" />{a.address}</span>
+                          <span className="flex items-center gap-1"><User className="w-3 h-3" />{a.reporterName} • {a.reporterPhone}</span>
+                        </div>
+                        {(a.injuredCount > 0 || a.affectedFamilies > 0) && (
+                          <div className="flex gap-3 text-xs text-gray-600 mt-1">
+                            {a.injuredCount > 0 && <span>🤕 {a.injuredCount} injured</span>}
+                            {a.affectedFamilies > 0 && <span>👨‍👩‍👧 {a.affectedFamilies} families</span>}
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                    <div className="flex gap-2 mt-3">
+                      <button
+                        onClick={() => {
+                          const victimLat = a.lat ? Number(a.lat) : (parseGpsFromAddress(a.address)?.lat ?? null);
+                          const victimLng = a.lng ? Number(a.lng) : (parseGpsFromAddress(a.address)?.lng ?? null);
+                          setNavigateTarget({ ...a, resolvedLat: victimLat, resolvedLng: victimLng });
+                          setShowNavigateModal(true);
+                        }}
+                        className="flex items-center gap-1.5 px-3 py-2 bg-blue-600 text-white rounded-lg text-sm font-semibold hover:bg-blue-700"
+                      >
+                        <Navigation className="w-4 h-4" /> Navigate
+                      </button>
+                      {isInProgress ? (
+                        <button
+                          onClick={() => handleMarkCompleted(a.id)}
+                          disabled={completingId === a.id}
+                          className="flex items-center gap-1.5 px-3 py-2 bg-emerald-600 text-white rounded-lg text-sm font-semibold hover:bg-emerald-700 disabled:opacity-60"
+                        >
+                          {completingId === a.id ? <Loader2 className="w-4 h-4 animate-spin" /> : <CheckCircle className="w-4 h-4" />}
+                          Mark as Completed
+                        </button>
+                      ) : (
+                        <button
+                          onClick={() => handleStartResponse(a.id)}
+                          disabled={startingResponseId === a.id}
+                          className="flex items-center gap-1.5 px-3 py-2 bg-green-600 text-white rounded-lg text-sm font-semibold hover:bg-green-700 disabled:opacity-60"
+                        >
+                          {startingResponseId === a.id ? <Loader2 className="w-4 h-4 animate-spin" /> : null}
+                          Start Response
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        )}
+        {loadingAssignments && dbAssignments.length === 0 && (
+          <div className="flex items-center gap-2 text-gray-500 text-sm mb-4">
+            <Loader2 className="w-4 h-4 animate-spin" /> Loading assignments...
+          </div>
+        )}
+
+        {/* Main Content Grid */}}
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
           {/* Assigned Incidents */}
           <div className="lg:col-span-2 bg-white p-6 rounded-xl shadow-sm border border-gray-200">
@@ -3043,6 +3233,55 @@ export default function ActionTeamPage() {
         </div>
 
         {/* MODALS FOR ACTION TEAMS */}
+
+        {/* Navigate Modal */}
+        {showNavigateModal && navigateTarget && (
+          <div className="fixed inset-0 bg-black bg-opacity-60 flex items-center justify-center z-50 p-4">
+            <div className="bg-white rounded-2xl shadow-2xl w-full max-w-lg">
+              <div className="bg-gradient-to-r from-blue-700 to-blue-600 text-white p-5 rounded-t-2xl flex items-center justify-between">
+                <div>
+                  <h3 className="text-lg font-bold flex items-center gap-2">
+                    <Navigation className="w-5 h-5" /> Navigate to Victim
+                  </h3>
+                  <p className="text-blue-200 text-sm mt-0.5">
+                    {navigateTarget.resolvedLat && navigateTarget.resolvedLng
+                      ? `Coords: ${navigateTarget.resolvedLat.toFixed(5)}, ${navigateTarget.resolvedLng.toFixed(5)}`
+                      : navigateTarget.address}
+                  </p>
+                </div>
+                <button onClick={() => setShowNavigateModal(false)} className="p-1.5 hover:bg-blue-800 rounded-lg">
+                  <X className="w-5 h-5" />
+                </button>
+              </div>
+              <div className="p-5 space-y-4">
+                {navigateTarget.resolvedLat && navigateTarget.resolvedLng ? (
+                  <RouteLeafletMap
+                    from={latitude && longitude ? { lat: latitude, lng: longitude } : null}
+                    to={{ lat: navigateTarget.resolvedLat, lng: navigateTarget.resolvedLng }}
+                  />
+                ) : (
+                  <div className="h-48 bg-gray-100 rounded-lg flex items-center justify-center text-gray-500 text-sm">
+                    GPS coordinates not available for this SOS
+                  </div>
+                )}
+                <div className="bg-gray-50 rounded-lg p-3 text-sm space-y-1">
+                  <p className="font-semibold text-gray-800">{navigateTarget.title}</p>
+                  <p className="text-gray-600 flex items-center gap-1"><MapPin className="w-3.5 h-3.5" />{navigateTarget.address}</p>
+                  <p className="text-gray-600 flex items-center gap-1"><Phone className="w-3.5 h-3.5" />{navigateTarget.reporterName} • {navigateTarget.reporterPhone}</p>
+                </div>
+                {navigateTarget.resolvedLat && navigateTarget.resolvedLng && (
+                  <a
+                    href={`https://www.google.com/maps/dir/?api=1&destination=${navigateTarget.resolvedLat},${navigateTarget.resolvedLng}`}
+                    target="_blank" rel="noopener noreferrer"
+                    className="flex items-center justify-center gap-2 w-full py-3 bg-green-600 text-white rounded-xl font-semibold hover:bg-green-700"
+                  >
+                    <ExternalLink className="w-4 h-4" /> Open in Google Maps
+                  </a>
+                )}
+              </div>
+            </div>
+          </div>
+        )}
 
         {/* Send Message Modal */}
         {showMessageModal && (

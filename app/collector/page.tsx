@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import {
   Eye,
   MessageSquare,
@@ -893,110 +893,96 @@ function TasksTab() {
   );
 }
 
-// SOS Tab Component
+// SOS Tab Component — Live from DB
 function SOSTab() {
   const [filter, setFilter] = useState("ALL");
+  const [sosList, setSosList] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [completingId, setCompletingId] = useState<string | null>(null);
 
-  const sosList = [
-    {
-      id: "sos-001",
-      title: "Flooding in residential colony",
-      description:
-        "Water level rising rapidly. Multiple families trapped on rooftops.",
-      disasterType: "flood",
-      severity: "CRITICAL",
-      address: "Sector 5, Near Water Tank, Bhubaneswar",
-      status: "DISPATCHED",
-      reporter: "Priya Patel",
-      phone: "+91-9812345678",
-      injuredCount: 3,
-      affectedFamilies: 12,
-      assignedTeam: "NDRF Team Alpha",
-      createdAt: new Date(Date.now() - 8 * 60000).toISOString(),
-    },
-    {
-      id: "sos-002",
-      title: "Building collapse after tremors",
-      description: "Old building collapsed. Estimated 8-10 people trapped.",
-      disasterType: "earthquake",
-      severity: "HIGH",
-      address: "Main Bazaar Road, Old Town, Bhubaneswar",
-      status: "VERIFIED",
-      reporter: "Arun Singh",
-      phone: "+91-9812345679",
-      injuredCount: 8,
-      affectedFamilies: 4,
-      assignedTeam: "Awaiting dispatch",
-      createdAt: new Date(Date.now() - 45 * 60000).toISOString(),
-    },
-    {
-      id: "sos-003",
-      title: "Fire in slum area",
-      description: "Large fire spreading. Medical assistance needed urgently.",
-      disasterType: "fire",
-      severity: "HIGH",
-      address: "Slum Area, Railway Station Road, Bhubaneswar",
-      status: "RESOLVED",
-      reporter: "Meena Devi",
-      phone: "+91-9812345680",
-      injuredCount: 5,
-      affectedFamilies: 30,
-      assignedTeam: "Fire Services Team",
-      createdAt: new Date(Date.now() - 2 * 3600000).toISOString(),
-    },
-  ];
+  const fetchSOS = async () => {
+    try {
+      const res = await fetch("/api/citizen-sos");
+      const data = await res.json();
+      if (data.success) {
+        const mapped = data.data.map((row: any) => ({
+          id: row.id,
+          title: `${row.disasterType?.charAt(0).toUpperCase()}${row.disasterType?.slice(1) || "Emergency"} — Citizen SOS`,
+          description: row.description || "No description provided.",
+          disasterType: row.disasterType || "other",
+          severity: row.severity || "HIGH",
+          address: row.address || (row.lat && row.lng ? `GPS: ${Number(row.lat).toFixed(5)}, ${Number(row.lng).toFixed(5)}` : "Location not provided"),
+          lat: row.lat,
+          lng: row.lng,
+          status: row.status || "UNVERIFIED",
+          reporter: row.name || "Unknown",
+          phone: row.phone || "—",
+          injuredCount: 0,
+          affectedFamilies: 0,
+          ticketId: row.ticketId,
+          createdAt: row.createdAt,
+        }));
+        setSosList(mapped);
+      }
+    } catch (e) {
+      console.error("Failed to fetch SOS:", e);
+    } finally {
+      setLoading(false);
+    }
+  };
 
-  const statusFilters = [
-    "ALL",
-    "UNVERIFIED",
-    "WARD_NOTIFIED",
-    "VERIFIED",
-    "DISPATCHED",
-    "RESOLVED",
-  ];
-  const filtered =
-    filter === "ALL" ? sosList : sosList.filter((s) => s.status === filter);
+  useEffect(() => {
+    fetchSOS();
+    const interval = setInterval(fetchSOS, 20000);
+    return () => clearInterval(interval);
+  }, []);
+
+  const handleMarkCompleted = async (sosId: string) => {
+    if (!confirm("Mark this SOS as completed? It will be permanently removed.")) return;
+    setCompletingId(sosId);
+    try {
+      const res = await fetch(`/api/citizen-sos?id=${sosId}`, { method: "DELETE" });
+      const data = await res.json();
+      if (data.success) {
+        setSosList((prev) => prev.filter((s) => s.id !== sosId));
+      } else {
+        alert("Failed: " + (data.error || "Unknown error"));
+      }
+    } catch {
+      alert("Failed to connect to server.");
+    } finally {
+      setCompletingId(null);
+    }
+  };
+
+  const statusFilters = ["ALL", "UNVERIFIED", "WARD_NOTIFIED", "VERIFIED", "DISPATCHED", "RESOLVED"];
+  const filtered = filter === "ALL" ? sosList : sosList.filter((s) => s.status === filter);
 
   return (
     <div className="space-y-6">
-      <div>
-        <h2 className="text-2xl font-bold text-gray-900">
-          <Bell className="w-6 h-6 inline mr-2 text-amber-600" />
-          SOS Alerts (View Only)
-        </h2>
-        <p className="text-gray-600 text-sm mt-1">
-          Monitor emergency reports • NDRF Admin manages verification and dispatch
-        </p>
+      <div className="flex items-start justify-between flex-wrap gap-2">
+        <div>
+          <h2 className="text-2xl font-bold text-gray-900">
+            <Bell className="w-6 h-6 inline mr-2 text-amber-600" />
+            SOS Alerts
+            {sosList.length > 0 && (
+              <span className="ml-3 text-sm font-normal px-2.5 py-1 bg-red-100 text-red-700 border border-red-300 rounded-full animate-pulse">
+                🔴 {sosList.length} Active
+              </span>
+            )}
+          </h2>
+          <p className="text-gray-600 text-sm mt-1">
+            Live citizen SOS alerts • Updates every 20 seconds
+          </p>
+        </div>
       </div>
 
       {/* Workflow banner */}
       <div className="bg-gray-50 p-4 rounded-lg border border-gray-200">
-        <p className="text-xs text-gray-600 font-medium mb-2 uppercase">
-          SOS Validation Workflow
-        </p>
+        <p className="text-xs text-gray-600 font-medium mb-2 uppercase">SOS Workflow</p>
         <div className="flex items-center gap-2 flex-wrap text-xs">
-          {[
-            "🆕 New SOS",
-            "→",
-            "📋 UNVERIFIED",
-            "→",
-            "📞 WARD NOTIFIED",
-            "→",
-            "✅ VERIFIED",
-            "→",
-            "🚁 DISPATCHED",
-            "→",
-            "✔ RESOLVED",
-          ].map((step, i) => (
-            <span
-              key={i}
-              className={cn(
-                "font-medium",
-                step === "→"
-                  ? "text-gray-400"
-                  : "bg-white border border-gray-200 px-2 py-1 rounded text-gray-700"
-              )}
-            >
+          {["🆕 New SOS", "→", "📋 UNVERIFIED", "→", "📞 WARD NOTIFIED", "→", "✅ VERIFIED", "→", "🚁 DISPATCHED", "→", "✔ RESOLVED"].map((step, i) => (
+            <span key={i} className={cn("font-medium", step === "→" ? "text-gray-400" : "bg-white border border-gray-200 px-2 py-1 rounded text-gray-700")}>
               {step}
             </span>
           ))}
@@ -1007,14 +993,9 @@ function SOSTab() {
       <div className="flex items-center gap-2 flex-wrap">
         <Filter className="w-4 h-4 text-gray-500" />
         {statusFilters.map((f) => (
-          <button
-            key={f}
-            onClick={() => setFilter(f)}
-            className={cn(
-              "px-3 py-1.5 rounded-lg text-sm font-medium border transition-colors",
-              filter === f
-                ? "bg-purple-600 text-white border-purple-600"
-                : "bg-white text-gray-700 border-gray-300 hover:border-purple-300"
+          <button key={f} onClick={() => setFilter(f)}
+            className={cn("px-3 py-1.5 rounded-lg text-sm font-medium border transition-colors",
+              filter === f ? "bg-purple-600 text-white border-purple-600" : "bg-white text-gray-700 border-gray-300 hover:border-purple-300"
             )}
           >
             {f} {f !== "ALL" && `(${sosList.filter((s) => s.status === f).length})`}
@@ -1024,79 +1005,59 @@ function SOSTab() {
 
       {/* SOS list */}
       <div className="space-y-4">
+        {loading && (
+          <div className="text-center py-10 text-gray-500">Loading live SOS alerts…</div>
+        )}
+        {!loading && filtered.length === 0 && (
+          <div className="text-center py-10 text-gray-500">No SOS alerts found. Live alerts appear here automatically.</div>
+        )}
         {filtered.map((sos) => (
-          <div
-            key={sos.id}
-            className="bg-gray-50 p-5 rounded-lg border border-gray-200"
-          >
+          <div key={sos.id} className="bg-red-50 border border-red-200 p-5 rounded-lg">
             <div className="flex items-start gap-4">
               <span className="text-2xl">{getDisasterIcon(sos.disasterType)}</span>
               <div className="flex-1">
                 <div className="flex items-center gap-2 flex-wrap mb-2">
-                  <span className="font-semibold text-gray-900">
-                    {sos.title}
-                  </span>
-                  <span
-                    className={cn(
-                      "text-xs px-2 py-1 rounded border",
-                      getSeverityColor(sos.severity)
-                    )}
-                  >
-                    {sos.severity}
-                  </span>
-                  <span
-                    className={cn(
-                      "text-xs px-2 py-1 rounded border",
-                      getStatusColor(sos.status)
-                    )}
-                  >
-                    {sos.status.replace("_", " ")}
-                  </span>
+                  <span className="font-semibold text-gray-900">{sos.title}</span>
+                  {sos.ticketId && (
+                    <span className="text-xs px-2 py-1 bg-gray-200 text-gray-700 rounded font-mono">{sos.ticketId}</span>
+                  )}
+                  <span className={cn("text-xs px-2 py-1 rounded border", getSeverityColor(sos.severity))}>{sos.severity}</span>
+                  <span className={cn("text-xs px-2 py-1 rounded border", getStatusColor(sos.status))}>{sos.status.replace("_", " ")}</span>
                 </div>
                 <p className="text-sm text-gray-700 mb-3">{sos.description}</p>
                 <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-3">
                   <div className="bg-white p-2 rounded border border-gray-200">
-                    <div className="text-xs text-gray-500">
-                      <MapPin className="w-3 h-3 inline" /> Location
-                    </div>
-                    <div className="text-sm font-medium text-gray-900">
-                      {sos.address}
-                    </div>
+                    <div className="text-xs text-gray-500"><MapPin className="w-3 h-3 inline" /> Location</div>
+                    <div className="text-sm font-medium text-gray-900">{sos.address}</div>
+                    {sos.lat && sos.lng && (
+                      <div className="text-xs text-blue-600 mt-0.5 font-mono">📍 {Number(sos.lat).toFixed(5)}, {Number(sos.lng).toFixed(5)}</div>
+                    )}
                   </div>
                   <div className="bg-white p-2 rounded border border-gray-200">
-                    <div className="text-xs text-gray-500">
-                      <User className="w-3 h-3 inline" /> Reporter
-                    </div>
-                    <div className="text-sm font-medium text-gray-900">
-                      {sos.reporter}
-                    </div>
+                    <div className="text-xs text-gray-500"><User className="w-3 h-3 inline" /> Reporter</div>
+                    <div className="text-sm font-medium text-gray-900">{sos.reporter}</div>
                   </div>
                   <div className="bg-white p-2 rounded border border-gray-200">
-                    <div className="text-xs text-gray-500">
-                      <Phone className="w-3 h-3 inline" /> Phone
-                    </div>
-                    <div className="text-sm font-medium text-gray-900">
-                      {sos.phone}
-                    </div>
+                    <div className="text-xs text-gray-500"><Phone className="w-3 h-3 inline" /> Phone</div>
+                    <div className="text-sm font-medium text-gray-900">{sos.phone}</div>
                   </div>
                   <div className="bg-white p-2 rounded border border-gray-200">
-                    <div className="text-xs text-gray-500">
-                      <Clock className="w-3 h-3 inline" /> Reported
-                    </div>
-                    <div className="text-sm font-medium text-gray-900">
-                      {getRelativeTime(sos.createdAt)}
-                    </div>
+                    <div className="text-xs text-gray-500"><Clock className="w-3 h-3 inline" /> Reported</div>
+                    <div className="text-sm font-medium text-gray-900">{getRelativeTime(sos.createdAt)}</div>
                   </div>
                 </div>
-                
-                {sos.assignedTeam && (
-                  <div className="p-2 bg-blue-50 border border-blue-200 rounded text-sm text-blue-900 mb-2">
-                    <strong>Team Assigned:</strong> {sos.assignedTeam}
-                  </div>
-                )}
-
-                <div className="text-xs text-gray-500 italic">
-                  View-only mode • Contact NDRF Admin to modify SOS status
+                <div className="flex gap-2 flex-wrap">
+                  <button
+                    onClick={() => handleMarkCompleted(sos.id)}
+                    disabled={completingId === sos.id}
+                    className="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition text-sm font-semibold disabled:opacity-50 flex items-center gap-2"
+                  >
+                    {completingId === sos.id ? (
+                      <>⏳ Completing…</>
+                    ) : (
+                      <>✅ Mark as Completed</>
+                    )}
+                  </button>
                 </div>
               </div>
             </div>
