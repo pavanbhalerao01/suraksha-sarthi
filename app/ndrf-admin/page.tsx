@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import {
   Eye,
   MessageSquare,
@@ -72,6 +72,101 @@ export default function NDRFAdminDashboard() {
   const [predictions, setPredictions] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [dispatchedTeams, setDispatchedTeams] = useState<number>(0);
+
+  // ── SOS alarm state (lives here so banner renders in NDRFAdminDashboard) ──
+  const [citizenSosList, setCitizenSosList] = useState<any[]>([]);
+  const [newSOSBanner, setNewSOSBanner] = useState(false);
+  const prevSosCountRef = useRef<number | null>(null);
+  const audioCtxRef = useRef<AudioContext | null>(null);
+
+  // Unlock AudioContext on first user interaction (browser autoplay policy)
+  useEffect(() => {
+    const unlock = () => {
+      if (audioCtxRef.current) return;
+      try {
+        const AudioCtx = window.AudioContext || (window as any).webkitAudioContext;
+        if (!AudioCtx) return;
+        const ctx = new AudioCtx();
+        const buf = ctx.createBuffer(1, 1, 22050);
+        const src = ctx.createBufferSource();
+        src.buffer = buf;
+        src.connect(ctx.destination);
+        src.start(0);
+        audioCtxRef.current = ctx;
+      } catch { /* ignore */ }
+    };
+    window.addEventListener("click", unlock, { once: true });
+    window.addEventListener("keydown", unlock, { once: true });
+    return () => {
+      window.removeEventListener("click", unlock);
+      window.removeEventListener("keydown", unlock);
+    };
+  }, []);
+
+  const playEmergencyAlarm = () => {
+    try {
+      const AudioCtx = window.AudioContext || (window as any).webkitAudioContext;
+      if (!AudioCtx) return;
+      const ctx = audioCtxRef.current ?? new AudioCtx();
+      if (!audioCtxRef.current) audioCtxRef.current = ctx;
+      ctx.resume().then(() => {
+        [0, 0.33, 0.66, 1.0, 1.33].forEach((offset, i) => {
+          const osc = ctx.createOscillator();
+          const gain = ctx.createGain();
+          osc.connect(gain);
+          gain.connect(ctx.destination);
+          osc.type = "square";
+          osc.frequency.value = i % 2 === 0 ? 880 : 660;
+          gain.gain.setValueAtTime(0.6, ctx.currentTime + offset);
+          gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + offset + 0.28);
+          osc.start(ctx.currentTime + offset);
+          osc.stop(ctx.currentTime + offset + 0.28);
+        });
+      }).catch(() => {});
+    } catch { /* Audio not available */ }
+  };
+
+  // Poll citizen SOS every 5s — triggers alarm + banner when new ones arrive
+  useEffect(() => {
+    const fetchCitizenSOS = async () => {
+      try {
+        const res = await fetch("/api/citizen-sos");
+        const data = await res.json();
+        if (data.success && data.data) {
+          if (prevSosCountRef.current !== null && data.data.length > prevSosCountRef.current) {
+            playEmergencyAlarm();
+            setNewSOSBanner(true);
+            setTimeout(() => setNewSOSBanner(false), 8000);
+          }
+          prevSosCountRef.current = data.data.length;
+          const mapped = data.data.map((r: any) => ({
+            id: r.id,
+            title: `🌐 ${r.disasterType?.charAt(0).toUpperCase() + r.disasterType?.slice(1)} Emergency — ${r.name}`,
+            description: r.description || `Citizen SOS from ${r.name}. Contact: ${r.phone}`,
+            disasterType: r.disasterType || "other",
+            severity: r.severity || "HIGH",
+            address: r.address || (r.lat && r.lng ? `GPS: ${parseFloat(r.lat).toFixed(5)}, ${parseFloat(r.lng).toFixed(5)}` : "Location not provided"),
+            status: r.status || "UNVERIFIED",
+            reporter: r.name,
+            phone: r.phone,
+            lat: r.lat,
+            lng: r.lng,
+            ticketId: r.ticketId,
+            injuredCount: 0,
+            affectedFamilies: 0,
+            createdAt: r.createdAt,
+            source: "CITIZEN",
+          }));
+          setCitizenSosList(mapped);
+        }
+      } catch { /* ignore */ }
+    };
+    fetchCitizenSOS();
+    const interval = setInterval(fetchCitizenSOS, 5000);
+    return () => clearInterval(interval);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   useEffect(() => {
     const fetchPredictions = async () => {
       try {
@@ -157,6 +252,21 @@ export default function NDRFAdminDashboard() {
 
   return (
     <div className="min-h-screen bg-gray-50">
+      {/* ── New SOS Flash Banner ── */}
+      {newSOSBanner && (
+        <div className="fixed top-0 left-0 right-0 z-[9999] flex items-center justify-center gap-3 bg-red-600 text-white py-3 px-4 shadow-2xl animate-pulse">
+          <span className="text-2xl">🚨</span>
+          <span className="font-bold text-lg tracking-wide">NEW CITIZEN SOS RECEIVED — Check SOS Alerts tab immediately!</span>
+          <span className="text-2xl">🚨</span>
+          <button
+            onClick={() => setNewSOSBanner(false)}
+            className="ml-4 px-3 py-1 bg-red-800 rounded-lg text-sm hover:bg-red-900 transition font-semibold"
+          >
+            Dismiss
+          </button>
+        </div>
+      )}
+
       {/* Header */}
       <header className="bg-blue-600 text-white shadow-lg">
         <div className="max-w-7xl mx-auto px-4 py-4">
@@ -288,7 +398,7 @@ export default function NDRFAdminDashboard() {
           {activeTab === "dashboard" && <DashboardTab />}
           {activeTab === "prediction" && <PredictionTab />}
           {activeTab === "tasks" && <TasksTab predictions={predictions} loading={loading} onDispatch={() => setDispatchedTeams((n: number) => n + 1)} />}
-          {activeTab === "sos" && <SOSTab onDispatch={() => setDispatchedTeams((n: number) => n + 1)} />}
+          {activeTab === "sos" && <SOSTab onDispatch={() => setDispatchedTeams((n: number) => n + 1)} citizenSosList={citizenSosList} setCitizenSosList={setCitizenSosList} />}
           {activeTab === "relief-camps" && <ReliefCampsTab />}
           {activeTab === "analytics" && <AnalyticsTab />}
         </div>
@@ -1076,14 +1186,18 @@ function TasksTab({ predictions, loading, onDispatch }: {
 }
 
 // SOS Tab Component
-function SOSTab({ onDispatch }: { onDispatch: () => void }) {
+function SOSTab({ onDispatch, citizenSosList, setCitizenSosList }: {
+  onDispatch: () => void;
+  citizenSosList: any[];
+  setCitizenSosList: React.Dispatch<React.SetStateAction<any[]>>;
+}) {
   const [filter, setFilter] = useState("ALL");
   const [sendingSOSId, setSendingSOSId] = useState<string | null>(null);
   const [showSOSModal, setShowSOSModal] = useState(false);
   const [selectedSOS, setSelectedSOS] = useState<any>(null);
   const [sosResponse, setSOSResponse] = useState<any>(null);
-  const [sendingRescueAlert, setSendingRescueAlert] = useState<string | null>(null);
   const [sendingCitizenAlert, setSendingCitizenAlert] = useState<string | null>(null);
+  const [sendingVolunteerAlert, setSendingVolunteerAlert] = useState<string | null>(null);
   const [alertResponse, setAlertResponse] = useState<any>(null);
   const [showAlertModal, setShowAlertModal] = useState(false);
   const [showForwardModal, setShowForwardModal] = useState(false);
@@ -1096,8 +1210,6 @@ function SOSTab({ onDispatch }: { onDispatch: () => void }) {
   const [forwardedMap, setForwardedMap] = useState<Record<string, { teamId: string; teamName: string }>>({});
   // Blocked teams: { [teamType]: true }
   const [blockedTeams, setBlockedTeams] = useState<Record<string, boolean>>({});
-  const [citizenSosList, setCitizenSosList] = useState<any[]>([]);
-
   // Fetch blocked teams on mount and every 30s
   useEffect(() => {
     const fetchBlockedTeams = async () => {
@@ -1120,129 +1232,63 @@ function SOSTab({ onDispatch }: { onDispatch: () => void }) {
     return () => clearInterval(interval);
   }, []);
 
-  // Fetch citizen SOS records from DB on mount and every 20s
-  useEffect(() => {
-    const fetchCitizenSOS = async () => {
-      try {
-        const res = await fetch("/api/citizen-sos");
-        const data = await res.json();
-        if (data.success && data.data) {
-          // Map DB fields to the shape sosList uses
-          const mapped = data.data.map((r: any) => ({
-            id: r.id,
-            title: `🌐 ${r.disasterType?.charAt(0).toUpperCase() + r.disasterType?.slice(1)} Emergency — ${r.name}`,
-            description: r.description || `Citizen SOS from ${r.name}. Contact: ${r.phone}`,
-            disasterType: r.disasterType || "other",
-            severity: r.severity || "HIGH",
-            address: r.address || (r.lat && r.lng ? `GPS: ${parseFloat(r.lat).toFixed(5)}, ${parseFloat(r.lng).toFixed(5)}` : "Location not provided"),
-            status: r.status || "UNVERIFIED",
-            reporter: r.name,
-            phone: r.phone,
-            lat: r.lat,
-            lng: r.lng,
-            ticketId: r.ticketId,
-            injuredCount: 0,
-            affectedFamilies: 0,
-            createdAt: r.createdAt,
-            source: "CITIZEN",
-          }));
-          setCitizenSosList(mapped);
-        }
-      } catch {
-        // ignore
-      }
-    };
-    fetchCitizenSOS();
-    const interval = setInterval(fetchCitizenSOS, 20000);
-    return () => clearInterval(interval);
-  }, []);
-
-  const handleDispatchTeam = (sosId: string) => {
-    if (dispatchedSOSIds.has(sosId)) return;
-    setDispatchedSOSIds(prev => new Set(prev).add(sosId));
-    onDispatch();
-  };
-
-  // Function to send alert to rescue teams
-  const handleSendRescueAlert = async (sos: any) => {
-    setSendingRescueAlert(sos.id);
-    setAlertResponse(null);
-    
-    try {
-      const response = await fetch("http://localhost:8000/api/alerts/rescue-team", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          disaster_id: sos.id,
-          disaster_type: sos.disasterType,
-          title: sos.title,
-          description: sos.description,
-          severity: sos.severity,
-          location: sos.address,
-          affected_area: `${sos.affectedFamilies} families affected`,
-          affected_people: `${sos.injuredCount} injured`,
-          sent_by: "NDRF_ADMIN"
-        })
-      });
-      
-      const data = await response.json();
-      
-      if (data.success) {
-        setAlertResponse({
-          type: 'rescue',
-          ...data.data
-        });
-        setShowAlertModal(true);
-      } else {
-        alert("Failed to send rescue team alert: " + (data.detail || "Unknown error"));
-      }
-    } catch (error) {
-      console.error("Error sending rescue team alert:", error);
-      alert("Failed to send rescue team alert. Please ensure backend is running.");
-    } finally {
-      setSendingRescueAlert(null);
-    }
-  };
-
-  // Function to send alert to citizens
+  // Send SMS alert to all CITIZEN users via Twilio
   const handleSendCitizenAlert = async (sos: any) => {
     setSendingCitizenAlert(sos.id);
     setAlertResponse(null);
-    
     try {
-      const response = await fetch("http://localhost:8000/api/alerts/citizen", {
+      const res = await fetch("/api/alerts/citizen-sms", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          disaster_id: sos.id,
-          disaster_type: sos.disasterType,
-          title: `⚠️ ${sos.disasterType.toUpperCase()} ALERT: ${sos.title}`,
-          description: sos.description,
+          disasterType: sos.disasterType,
           severity: sos.severity,
-          location: sos.address,
-          affected_area: `${sos.affectedFamilies} families affected`,
-          affected_people: `${sos.injuredCount} injured`,
-          safety_instructions: getSafetyInstructions(sos.disasterType),
-          sent_by: "NDRF_ADMIN"
-        })
+          area: sos.address,
+          reporterPhone: sos.phone,
+        }),
       });
-      
-      const data = await response.json();
-      
-      if (data.success) {
-        setAlertResponse({
-          type: 'citizen',
-          ...data.data
-        });
-        setShowAlertModal(true);
-      } else {
-        alert("Failed to send citizen alert: " + (data.detail || "Unknown error"));
-      }
-    } catch (error) {
-      console.error("Error sending citizen alert:", error);
-      alert("Failed to send citizen alert. Please ensure backend is running.");
+      const data = await res.json();
+      setAlertResponse({
+        type: "citizen",
+        disasterType: sos.disasterType,
+        area: sos.address,
+        ...data,
+      });
+      setShowAlertModal(true);
+    } catch (err) {
+      console.error("Citizen alert error:", err);
+      alert("Failed to send citizen SMS alert. Please try again.");
     } finally {
       setSendingCitizenAlert(null);
+    }
+  };
+
+  // Send SMS alert to all VOLUNTEER users via Twilio
+  const handleVolunteerAlert = async (sos: any) => {
+    setSendingVolunteerAlert(sos.id);
+    setAlertResponse(null);
+    try {
+      const res = await fetch("/api/alerts/volunteer-sms", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          disasterType: sos.disasterType,
+          area: sos.address,
+        }),
+      });
+      const data = await res.json();
+      setAlertResponse({
+        type: "volunteer",
+        disasterType: sos.disasterType,
+        area: sos.address,
+        ...data,
+      });
+      setShowAlertModal(true);
+    } catch (err) {
+      console.error("Volunteer alert error:", err);
+      alert("Failed to send volunteer SMS alert. Please try again.");
+    } finally {
+      setSendingVolunteerAlert(null);
     }
   };
 
@@ -1616,28 +1662,6 @@ function SOSTab({ onDispatch }: { onDispatch: () => void }) {
                     </button>
                   )}
                   <button 
-                    onClick={() => handleDispatchTeam(sos.id)}
-                    disabled={dispatchedSOSIds.has(sos.id)}
-                    className={`px-4 py-2 rounded-lg transition text-sm font-medium ${
-                      dispatchedSOSIds.has(sos.id)
-                        ? "bg-green-100 text-green-700 border border-green-300 cursor-default"
-                        : "bg-blue-600 text-white hover:bg-blue-700"
-                    }`}
-                  >
-                    {dispatchedSOSIds.has(sos.id) ? "✓ Team Dispatched" : "🚁 Dispatch Team"}
-                  </button>
-                  <button 
-                    onClick={() => handleSendRescueAlert(sos)}
-                    disabled={sendingRescueAlert === sos.id}
-                    className="px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 transition text-sm font-medium disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
-                  >
-                    {sendingRescueAlert === sos.id ? (
-                      <>⏳ Sending...</>
-                    ) : (
-                      <>🚒 Rescue Team Alert</>
-                    )}
-                  </button>
-                  <button 
                     onClick={() => handleSendCitizenAlert(sos)}
                     disabled={sendingCitizenAlert === sos.id}
                     className="px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition text-sm font-medium disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
@@ -1649,12 +1673,12 @@ function SOSTab({ onDispatch }: { onDispatch: () => void }) {
                     )}
                   </button>
                   <button 
-                    onClick={() => handleSendSOS(sos)}
-                    disabled={sendingSOSId === sos.id}
+                    onClick={() => handleVolunteerAlert(sos)}
+                    disabled={sendingVolunteerAlert === sos.id}
                     className="px-4 py-2 bg-orange-600 text-white rounded-lg hover:bg-orange-700 transition text-sm font-medium disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
                   >
-                    {sendingSOSId === sos.id ? (
-                      <>⏳ Sending...</>
+                    {sendingVolunteerAlert === sos.id ? (
+                      <>⏳ Sending SMS...</>
                     ) : (
                       <>📢 Alert Volunteers</>
                     )}
@@ -1984,113 +2008,72 @@ function SOSTab({ onDispatch }: { onDispatch: () => void }) {
         </div>
       )}
 
-      {/* Alert Success Modal */}
+      {/* SMS Alert Result Modal */}
       {showAlertModal && alertResponse && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-xl shadow-2xl max-w-2xl w-full max-h-[90vh] overflow-y-auto">
+          <div className="bg-white rounded-xl shadow-2xl max-w-lg w-full">
             <div className={cn(
               "text-white p-6 rounded-t-xl",
-              alertResponse.type === 'rescue' 
-                ? "bg-gradient-to-r from-purple-600 to-indigo-600" 
+              alertResponse.type === "volunteer"
+                ? "bg-gradient-to-r from-orange-600 to-amber-600"
                 : "bg-gradient-to-r from-indigo-600 to-blue-600"
             )}>
-              <h3 className="text-2xl font-bold flex items-center gap-2">
-                {alertResponse.type === 'rescue' ? (
-                  <>
-                    <Radio className="w-6 h-6" />
-                    Rescue Team Alert Sent
-                  </>
-                ) : (
-                  <>
-                    <Radio className="w-6 h-6" />
-                    Citizen Alert Sent
-                  </>
-                )}
+              <h3 className="text-xl font-bold flex items-center gap-2">
+                <Radio className="w-5 h-5" />
+                {alertResponse.type === "volunteer" ? "Volunteer SMS Alert Sent" : "Citizen SMS Alert Sent"}
               </h3>
-              <p className="text-white opacity-90 mt-1">
-                {alertResponse.type === 'rescue' 
-                  ? "Emergency alert broadcast to rescue teams" 
-                  : "Mass notification sent to citizens in affected area"}
+              <p className="text-white/80 text-sm mt-1">
+                {alertResponse.type === "volunteer"
+                  ? "SMS broadcast sent to all registered volunteers"
+                  : "SMS broadcast sent to all registered citizens"}
               </p>
             </div>
-            
+
             <div className="p-6 space-y-4">
-              <div className="bg-green-50 border border-green-200 rounded-lg p-4">
-                <div className="flex items-start gap-3">
-                  <CheckCircle2 className="w-6 h-6 text-green-600 flex-shrink-0 mt-0.5" />
+              {alertResponse.success ? (
+                <div className="bg-green-50 border border-green-200 rounded-lg p-4 flex items-start gap-3">
+                  <CheckCircle2 className="w-5 h-5 text-green-600 flex-shrink-0 mt-0.5" />
                   <div>
-                    <p className="font-semibold text-green-900">Alert Sent Successfully</p>
-                    <p className="text-sm text-green-700 mt-1">{alertResponse.message}</p>
+                    <p className="font-semibold text-green-900">Broadcast Completed</p>
+                    <p className="text-sm text-green-700 mt-0.5">{alertResponse.message}</p>
                   </div>
+                </div>
+              ) : (
+                <div className="bg-red-50 border border-red-200 rounded-lg p-4 flex items-start gap-3">
+                  <AlertTriangle className="w-5 h-5 text-red-600 flex-shrink-0 mt-0.5" />
+                  <p className="text-sm text-red-800">{alertResponse.error || "Alert failed. Check Twilio credentials."}</p>
+                </div>
+              )}
+
+              <div className="grid grid-cols-3 gap-3">
+                <div className="bg-gray-50 p-3 rounded-lg text-center">
+                  <div className="text-xl font-bold text-gray-900">{alertResponse.totalTargets ?? 0}</div>
+                  <div className="text-xs text-gray-500 mt-0.5">Total targets</div>
+                </div>
+                <div className="bg-green-50 p-3 rounded-lg text-center">
+                  <div className="text-xl font-bold text-green-700">{alertResponse.sent ?? 0}</div>
+                  <div className="text-xs text-gray-500 mt-0.5">SMS sent ✓</div>
+                </div>
+                <div className="bg-red-50 p-3 rounded-lg text-center">
+                  <div className="text-xl font-bold text-red-600">{alertResponse.failed ?? 0}</div>
+                  <div className="text-xs text-gray-500 mt-0.5">Failed ✗</div>
                 </div>
               </div>
 
               <div className="grid grid-cols-2 gap-3">
                 <div className="bg-gray-50 p-3 rounded-lg">
                   <div className="text-xs text-gray-500 mb-1">Disaster Type</div>
-                  <div className="font-medium text-gray-900 capitalize">{alertResponse.disaster_type}</div>
+                  <div className="font-medium text-gray-900 capitalize">{alertResponse.disasterType || "—"}</div>
                 </div>
                 <div className="bg-gray-50 p-3 rounded-lg">
-                  <div className="text-xs text-gray-500 mb-1">
-                    {alertResponse.type === 'rescue' ? 'Teams Notified' : 'Citizens Notified'}
-                  </div>
-                  <div className="font-medium text-gray-900">
-                    {alertResponse.type === 'rescue' 
-                      ? alertResponse.teams_notified 
-                      : alertResponse.citizens_notified?.toLocaleString()}
-                  </div>
-                </div>
-              </div>
-
-              {alertResponse.type === 'rescue' && alertResponse.rescue_teams && (
-                <div className="bg-gray-50 border border-gray-200 rounded-lg p-4 max-h-60 overflow-y-auto">
-                  <h5 className="font-semibold text-gray-900 mb-3 flex items-center gap-2">
-                    <Users className="w-4 h-4" />
-                    Notified Rescue Teams
-                  </h5>
-                  <div className="space-y-2">
-                    {alertResponse.rescue_teams.map((team: any, idx: number) => (
-                      <div key={idx} className="bg-white p-3 rounded border border-gray-200 text-sm">
-                        <div className="font-medium text-gray-900">{team.team_name}</div>
-                        <div className="text-xs text-gray-500 mt-1">
-                          <Phone className="w-3 h-3 inline mr-1" />
-                          {team.contact_number}
-                        </div>
-                        <div className="text-xs text-blue-600 mt-1">
-                          <MapPin className="w-3 h-3 inline mr-1" />
-                          {team.location}
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              )}
-
-              {alertResponse.type === 'citizen' && alertResponse.sample_recipients && (
-                <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
-                  <p className="text-sm text-blue-800 flex items-start gap-2">
-                    <Info className="w-4 h-4 flex-shrink-0 mt-0.5" />
-                    <span>
-                      Alert sent to <strong>{alertResponse.citizens_notified?.toLocaleString()}</strong> citizens 
-                      in <strong>{alertResponse.location}</strong> via SMS, Email, and Push Notifications.
-                    </span>
-                  </p>
-                </div>
-              )}
-
-              <div className="bg-gray-50 p-3 rounded-lg">
-                <div className="text-xs text-gray-500 mb-1">Sent At</div>
-                <div className="text-sm font-medium text-gray-900">
-                  {new Date(alertResponse.sent_at).toLocaleString()}
+                  <div className="text-xs text-gray-500 mb-1">Area</div>
+                  <div className="font-medium text-gray-900 text-xs">{alertResponse.area || "—"}</div>
                 </div>
               </div>
 
               <div className="flex justify-end pt-4 border-t">
                 <button
-                  onClick={() => {
-                    setShowAlertModal(false);
-                    setAlertResponse(null);
-                  }}
+                  onClick={() => { setShowAlertModal(false); setAlertResponse(null); }}
                   className="px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition font-medium"
                 >
                   Close

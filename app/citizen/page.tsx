@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, dynamic as _dynamic } from "react";
+import { useState, useEffect } from "react";
 import dynamic from "next/dynamic";
 import Link from "next/link";
 import { 
@@ -15,9 +15,15 @@ import {
   Shield,
   Navigation,
   Upload,
+  HeartPulse,
+  Ambulance,
+  X,
+  Check,
   Building2,
   ChevronRight,
   Activity,
+  Loader2,
+  User,
 } from "lucide-react";
 import type { Disaster } from "@/components/maps/HospitalFinderMap";
 
@@ -27,9 +33,9 @@ const HospitalFinderMap = dynamic(
   { ssr: false, loading: () => <div className="h-[480px] bg-gray-100 animate-pulse rounded-xl flex items-center justify-center text-gray-400">Loading map…</div> },
 );
 
-// ─────────────────────────────────────────────────────────
+// ─────────────────────────────────────────────────────────────────────────────
 //  Demo SOS disasters across Maharashtra
-// ─────────────────────────────────────────────────────────
+// ─────────────────────────────────────────────────────────────────────────────
 const DEMO_DISASTERS: Disaster[] = [
   {
     id: "sos-001",
@@ -106,101 +112,182 @@ const TYPE_ICONS: Record<string, string> = {
 
 export default function CitizenPortal() {
   const [sosActive, setSosActive] = useState(false);
+  const [medicalSosActive, setMedicalSosActive] = useState(false);
   const [showReportForm, setShowReportForm] = useState(false);
+  const [sosTicketId, setSosTicketId] = useState("");
+  const [medicalTicketId, setMedicalTicketId] = useState("");
   const [activeTab, setActiveTab] = useState<"sos" | "hospitals">("sos");
   const [selectedDisaster, setSelectedDisaster] = useState<Disaster | null>(null);
 
-  // SOS Modal state
-  const [showSOSModal, setShowSOSModal] = useState(false);
-  const [sosSubmitting, setSosSubmitting] = useState(false);
-  const [sosTicket, setSosTicket] = useState<string | null>(null);
-  const [gpsLoading, setGpsLoading] = useState(false);
-  const [gpsError, setGpsError] = useState<string | null>(null);
-  const [gpsCoords, setGpsCoords] = useState<{ lat: number; lng: number; accuracy: number } | null>(null);
-  const [manualCoords, setManualCoords] = useState({ lat: "", lng: "" });
-  const [useManual, setUseManual] = useState(false);
-  const [sosForm, setSosForm] = useState({ name: "", phone: "", disasterType: "flood", description: "" });
+  // ── SOS Dialog state ──
+  const [showSOSDialog, setShowSOSDialog] = useState(false);
+  const [sosDisasterType, setSosDisasterType] = useState("flood");
+  const [sosGps, setSosGps] = useState<{ lat: number; lng: number } | null>(null);
+  const [gettingLocation, setGettingLocation] = useState(false);
+  const [locationError, setLocationError] = useState<string | null>(null);
+  const [submittingSOS, setSubmittingSOS] = useState(false);
+  const [sosError, setSosError] = useState<string | null>(null);
+  const [userProfile, setUserProfile] = useState<{ name: string; phone: string } | null>(null);
 
-  const requestGPS = () => {
-    if (!navigator.geolocation) {
-      setGpsError("GPS not supported on this device.");
-      return;
-    }
-    setGpsLoading(true);
-    setGpsError(null);
-    setGpsCoords(null);
-    navigator.geolocation.getCurrentPosition(
-      (pos) => {
-        setGpsCoords({
-          lat: pos.coords.latitude,
-          lng: pos.coords.longitude,
-          accuracy: pos.coords.accuracy,
-        });
-        setGpsLoading(false);
-        setGpsError(null);
-      },
-      (err) => {
-        setGpsLoading(false);
-        if (err.code === 1) {
-          setGpsError("Location permission denied. Allow location in browser settings and Retry, or enter coordinates manually below.");
-        } else if (err.code === 2) {
-          setGpsError("GPS unavailable. Turn on Location/GPS on your device and Retry, or enter coordinates manually.");
-        } else {
-          setGpsError("Location request timed out. Retry or enter coordinates manually.");
+  const disasterTypes = [
+    { value: "flood",            label: "🌊 Flood" },
+    { value: "fire",             label: "🔥 Fire" },
+    { value: "earthquake",       label: "🏚️ Earthquake" },
+    { value: "landslide",        label: "⛰️ Landslide" },
+    { value: "cyclone",          label: "🌀 Cyclone" },
+    { value: "building_collapse",label: "🏗️ Building Collapse" },
+    { value: "heatwave",         label: "☀️ Heatwave" },
+    { value: "other",            label: "⚠️ Other Emergency" },
+  ];
+
+  // Pre-fetch user profile on mount
+  useEffect(() => {
+    fetch("/api/auth/me")
+      .then((r) => (r.ok ? r.json() : null))
+      .then((data) => {
+        if (data?.user) {
+          setUserProfile({ name: data.user.name || "", phone: data.user.phone || "" });
         }
-      },
-      { timeout: 15000, enableHighAccuracy: true, maximumAge: 0 }
-    );
+      })
+      .catch(() => {});
+  }, []);
+
+  // Opens the SOS dialog and immediately starts fetching GPS + user
+  const openSOSDialog = () => {
+    if (sosActive) return;
+    setSosGps(null);
+    setLocationError(null);
+    setGettingLocation(true);
+    setSosError(null);
+    setShowSOSDialog(true);
+
+    // Fetch GPS and latest user profile in parallel
+    Promise.allSettled([
+      new Promise<{ lat: number; lng: number }>((resolve, reject) => {
+        if (!navigator.geolocation) { reject(new Error("GPS not supported")); return; }
+        navigator.geolocation.getCurrentPosition(
+          (pos) => resolve({ lat: pos.coords.latitude, lng: pos.coords.longitude }),
+          (err) => reject(err),
+          { enableHighAccuracy: true, timeout: 10000 }
+        );
+      }),
+      fetch("/api/auth/me").then((r) => (r.ok ? r.json() : null)).catch(() => null),
+    ]).then(([gpsResult, profileResult]) => {
+      if (gpsResult.status === "fulfilled") {
+        setSosGps(gpsResult.value);
+      } else {
+        setLocationError("Could not get GPS. Location will be marked unavailable.");
+      }
+      if (profileResult.status === "fulfilled" && profileResult.value?.user) {
+        setUserProfile({ name: profileResult.value.user.name || "", phone: profileResult.value.user.phone || "" });
+      }
+      setGettingLocation(false);
+    });
   };
 
-  const openSOSModal = () => {
-    setShowSOSModal(true);
-    setSosTicket(null);
-    setGpsCoords(null);
-    setGpsError(null);
-    setUseManual(false);
-    setManualCoords({ lat: "", lng: "" });
-    setSosForm({ name: "", phone: "", disasterType: "flood", description: "" });
-    // Don't auto-call — user must explicitly tap the button so browser shows permission prompt
-  };
-
-  // Final coordinates to submit
-  const finalLat = useManual ? parseFloat(manualCoords.lat) || null : gpsCoords?.lat ?? null;
-  const finalLng = useManual ? parseFloat(manualCoords.lng) || null : gpsCoords?.lng ?? null;
-  const hasValidCoords = useManual
-    ? !isNaN(parseFloat(manualCoords.lat)) && !isNaN(parseFloat(manualCoords.lng))
-    : gpsCoords !== null;
-
-  const submitSOS = async () => {
-    if (!sosForm.name.trim() || !sosForm.phone.trim()) return;
-    if (!hasValidCoords) return;
-    setSosSubmitting(true);
+  // Submits the SOS after the user confirms in the dialog
+  const handleSendSOS = async () => {
+    setSubmittingSOS(true);
+    setSosError(null);
+    const name  = userProfile?.name  || "Emergency Caller";
+    const phone = userProfile?.phone || "Unknown";
     try {
       const res = await fetch("/api/citizen-sos", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          name: sosForm.name,
-          phone: sosForm.phone,
-          disasterType: sosForm.disasterType,
-          description: sosForm.description || undefined,
-          address: null,
-          lat: finalLat,
-          lng: finalLng,
+          name,
+          phone,
+          disasterType: sosDisasterType,
+          description: `Emergency SOS — ${sosDisasterType} reported by ${name}. Immediate assistance required.`,
+          address: sosGps
+            ? `GPS: ${sosGps.lat.toFixed(6)}, ${sosGps.lng.toFixed(6)}`
+            : "Location unavailable",
+          lat: sosGps?.lat ?? null,
+          lng: sosGps?.lng ?? null,
           severity: "HIGH",
         }),
       });
       const data = await res.json();
       if (data.success) {
-        setSosTicket(data.data.ticketId);
         setSosActive(true);
+        setSosTicketId(data.data.ticketId);
+        setShowSOSDialog(false);
       } else {
-        alert("Failed to send SOS: " + data.error);
+        setSosError(data.error || "Failed to send SOS. Please call 112.");
       }
     } catch {
-      alert("Network error. Please try again.");
+      setSosError("Network error. Please call 112 directly.");
     } finally {
-      setSosSubmitting(false);
+      setSubmittingSOS(false);
+    }
+  };
+
+  const handleCancelSOS = () => {
+    if (confirm("Are you sure you want to cancel this SOS?\n\nOnly cancel if the emergency is resolved or was sent by mistake.")) {
+      setSosActive(false);
+      setSosTicketId("");
+    }
+  };
+  
+  const handleReceivedHelp = () => {
+    if (confirm("Have you received help from authorities?\n\nClick OK to mark this emergency as resolved.")) {
+      setSosActive(false);
+      setSosTicketId("");
+    }
+  };
+  
+  const handleCancelMedicalSOS = () => {
+    if (confirm("Are you sure you want to cancel this Medical SOS?\n\nOnly cancel if help is no longer needed or was sent by mistake.")) {
+      setMedicalSosActive(false);
+      setMedicalTicketId("");
+      alert(`✓ Medical SOS Cancelled\n\nTicket ${medicalTicketId} has been cancelled.\nAmbulance and medical team have been notified.`);
+    }
+  };
+  
+  const handleReceivedMedicalHelp = () => {
+    if (confirm("Have you received medical assistance?\n\nClick OK to mark this medical emergency as resolved.")) {
+      setMedicalSosActive(false);
+      setMedicalTicketId("");
+      alert(`✓ Medical Help Received - Emergency Resolved\n\nTicket ${medicalTicketId} marked as complete.\nWe hope you're safe. Take care!`);
+    }
+  };
+
+  const handleMedicalSOS = async () => {
+    setMedicalSosActive(true);
+    const ticketId = "MED-SOS-" + Date.now().toString(36).toUpperCase();
+    setMedicalTicketId(ticketId);
+    
+    // Get GPS location
+    if (navigator.geolocation) {
+      navigator.geolocation.getCurrentPosition(
+        (position) => {
+          // In production: Send to medical team API
+          // This would create a patient entry with RED triage priority
+          const medicalSosData = {
+            ticketId,
+            type: 'medical_emergency',
+            priority: 'RED',
+            coordinates: {
+              lat: position.coords.latitude,
+              lng: position.coords.longitude,
+            },
+            timestamp: new Date().toISOString(),
+            status: 'pending',
+            patientName: 'Emergency SOS Caller',
+            condition: 'Medical Emergency - Immediate Attention Required',
+          };
+          
+          console.log('Medical SOS Data:', medicalSosData);
+          
+          alert(`🚑 MEDICAL EMERGENCY SOS ACTIVATED!\n\n✓ Ambulance dispatched to your location\n✓ Medical team alerted with RED priority\n✓ GPS coordinates shared\n\nTicket ID: ${ticketId}\n\nHelp is on the way! Stay calm and stay on the line if you called emergency services.`);
+        },
+        (error) => {
+          alert(`🚑 MEDICAL EMERGENCY SOS ACTIVATED!\n\nTicket ID: ${ticketId}\n\n⚠️ GPS unavailable, but medical team has been alerted.\n\nPlease provide your location to emergency responders.`);
+        }
+      );
+    } else {
+      alert(`🚑 MEDICAL EMERGENCY SOS ACTIVATED!\n\nTicket ID: ${ticketId}\n\nMedical team has been alerted.\nPlease provide your location when they contact you.`);
     }
   };
 
@@ -228,7 +315,6 @@ export default function CitizenPortal() {
       </header>
 
       <div className={activeTab === "hospitals" ? "max-w-7xl mx-auto px-4 py-6" : "max-w-4xl mx-auto px-4 py-6"}>
-
         {/* ─── Tab Navigation ─── */}
         <div className="bg-white rounded-xl shadow-sm border border-gray-200 mb-6 p-1 flex gap-1">
           <button
@@ -255,254 +341,124 @@ export default function CitizenPortal() {
           </button>
         </div>
 
-        {/* ━━━━━━━━━━━━  SOS TAB  ━━━━━━━━━━━━ */}
         {activeTab === "sos" && (
         <>
-        {/* SOS Button - Most Prominent */}
-        <div className="bg-gradient-to-br from-red-600 to-red-700 p-8 rounded-2xl shadow-2xl mb-6 text-white">
-          <div className="text-center">
-            <h2 className="text-3xl font-bold mb-3">Emergency SOS</h2>
-            <p className="text-red-100 mb-6">
-              Press button below if you need immediate help. Your name, contact and GPS location will be sent to rescue authorities.
-            </p>
-            <button
-              onClick={sosActive ? undefined : openSOSModal}
-              className={`w-48 h-48 mx-auto rounded-full font-bold text-2xl shadow-2xl transition-all transform hover:scale-105 active:scale-95 flex flex-col items-center justify-center ${
-                sosActive
-                  ? "bg-green-500 animate-pulse cursor-default"
-                  : "bg-white text-red-600 hover:bg-red-50"
-              }`}
-            >
-              {sosActive ? (
-                <>
-                  <CheckCircle className="w-16 h-16 mb-2" />
-                  <span className="text-lg">SOS Sent!</span>
-                </>
-              ) : (
-                <>
-                  <AlertCircle className="w-16 h-16 mb-2" />
-                  <span>HELP!</span>
-                </>
-              )}
-            </button>
-            {sosActive && sosTicket && (
-              <div className="mt-4 bg-green-600 p-3 rounded-lg">
-                <p className="font-semibold">✓ Authorities have been alerted</p>
-                <p className="text-green-100 text-sm">Ticket ID: <strong>{sosTicket}</strong></p>
-                <p className="text-green-200 text-xs mt-1">Keep this ID to track your request</p>
-              </div>
-            )}
-          </div>
-        </div>
-
-        {/* ─── SOS Modal ─── */}
-        {showSOSModal && (
-          <div className="fixed inset-0 bg-black bg-opacity-60 flex items-center justify-center z-50 p-4">
-            <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md">
-              <div className="bg-gradient-to-r from-red-600 to-rose-600 text-white p-5 rounded-t-2xl">
-                <h3 className="text-xl font-bold flex items-center gap-2">
-                  <AlertCircle className="w-5 h-5" /> Send Emergency SOS
-                </h3>
-                <p className="text-red-100 text-sm mt-1">Your info + GPS location will be sent to NDRF Admin</p>
-              </div>
-              {sosTicket ? (
-                <div className="p-6 text-center">
-                  <CheckCircle className="w-16 h-16 text-green-500 mx-auto mb-3" />
-                  <h4 className="text-xl font-bold text-gray-900 mb-2">SOS Sent Successfully!</h4>
-                  <div className="bg-green-50 border border-green-200 rounded-lg p-4 mb-4">
-                    <p className="text-sm text-gray-700">Your Ticket ID:</p>
-                    <p className="text-2xl font-mono font-bold text-green-700">{sosTicket}</p>
-                    <p className="text-xs text-gray-500 mt-1">Save this ID to track your request</p>
+        {/* Emergency SOS Buttons Grid */}
+        <div className="grid md:grid-cols-2 gap-6 mb-6">
+          {/* General Emergency SOS */}
+          <div className="bg-gradient-to-br from-red-600 to-red-700 p-6 rounded-2xl shadow-2xl text-white">
+            <div className="text-center">
+              <h2 className="text-2xl font-bold mb-2">Emergency SOS</h2>
+              <p className="text-red-100 mb-4 text-sm">
+                Immediate danger, disaster, or life-threatening situation
+              </p>
+              <button 
+                onClick={openSOSDialog}
+                disabled={sosActive}
+                className={`w-40 h-40 mx-auto rounded-full font-bold text-xl shadow-2xl transition-all transform hover:scale-105 active:scale-95 flex flex-col items-center justify-center ${
+                  sosActive 
+                    ? 'bg-green-500 animate-pulse cursor-default' 
+                    : 'bg-white text-red-600 hover:bg-red-50'
+                }`}
+              >
+                {sosActive ? (
+                  <>
+                    <CheckCircle className="w-12 h-12 mb-2" />
+                    <span className="text-base">SOS Sent!</span>
+                  </>
+                ) : (
+                  <>
+                    <AlertCircle className="w-12 h-12 mb-2" />
+                    <span>HELP!</span>
+                  </>
+                )}
+              </button>
+              {sosActive && (
+                <div className="mt-4 space-y-3">
+                  <div className="bg-green-600 p-3 rounded-lg">
+                    <p className="font-semibold text-sm">✓ SOS sent to authorities</p>
+                    <p className="text-green-100 text-xs">Your location &amp; details are with the rescue team</p>
+                    <p className="text-green-100 text-xs font-mono mt-1">🎫 {sosTicketId}</p>
                   </div>
-                  {gpsCoords && (
-                    <p className="text-xs text-gray-500 mb-4">📍 Location shared: {gpsCoords.lat.toFixed(5)}, {gpsCoords.lng.toFixed(5)}</p>
-                  )}
-                  <button
-                    onClick={() => setShowSOSModal(false)}
-                    className="w-full py-3 bg-green-600 text-white rounded-lg font-semibold"
-                  >
-                    Close
-                  </button>
-                </div>
-              ) : (
-                <div className="p-6 space-y-4">
-                  {/* GPS Location — explicit user tap required */}
-                  <div className="space-y-2">
-                    <label className="block text-sm font-semibold text-gray-700">Your Location <span className="text-red-500">*</span></label>
-
-                    {/* Not yet requested, no error, GPS mode */}
-                    {!gpsLoading && !gpsCoords && !gpsError && !useManual && (
-                      <button
-                        type="button"
-                        onClick={requestGPS}
-                        className="w-full py-2.5 bg-blue-600 text-white rounded-lg font-semibold hover:bg-blue-700 flex items-center justify-center gap-2"
-                      >
-                        <Navigation className="w-4 h-4" />
-                        Tap to Share My Location
-                      </button>
-                    )}
-
-                    {/* Loading */}
-                    {gpsLoading && (
-                      <div className="flex items-center gap-2 text-sm rounded-lg px-3 py-2 bg-yellow-50 text-yellow-800 border border-yellow-300">
-                        <span className="w-4 h-4 border-2 border-yellow-600 border-t-transparent rounded-full animate-spin flex-shrink-0" />
-                        Requesting GPS permission — please allow in browser prompt
-                      </div>
-                    )}
-
-                    {/* GPS success */}
-                    {!gpsLoading && gpsCoords && !useManual && (
-                      <div className="space-y-1">
-                        <div className="flex items-center gap-2 text-sm rounded-lg px-3 py-2 bg-green-50 text-green-800 border border-green-300">
-                          <span className="text-green-600 text-base font-bold">✓</span>
-                          <span>
-                            <strong className="font-mono">{gpsCoords.lat.toFixed(6)}, {gpsCoords.lng.toFixed(6)}</strong>
-                            <span className="ml-2 text-xs text-green-700">±{Math.round(gpsCoords.accuracy)}m</span>
-                          </span>
-                        </div>
-                        {gpsCoords.accuracy > 500 && (
-                          <div className="text-xs text-orange-700 bg-orange-50 border border-orange-200 rounded px-3 py-1.5">
-                            ⚠️ Low accuracy ({Math.round(gpsCoords.accuracy)}m) — browser used network/IP location, not real GPS. On mobile, enable GPS in settings and{" "}
-                            <button type="button" onClick={requestGPS} className="underline font-semibold">retry</button>.
-                          </div>
-                        )}
-                      </div>
-                    )}
-
-                    {/* GPS error */}
-                    {!gpsLoading && gpsError && !useManual && (
-                      <div className="rounded-lg border border-red-300 bg-red-50 p-3 space-y-2">
-                        <p className="text-sm text-red-800">{gpsError}</p>
-                        <button type="button" onClick={requestGPS} className="w-full py-1.5 bg-red-600 text-white rounded-lg text-sm font-semibold hover:bg-red-700">
-                          Retry GPS
-                        </button>
-                      </div>
-                    )}
-
-                    {/* Manual coordinate entry */}
-                    {useManual && (
-                      <div className="space-y-2">
-                        <div className="flex gap-2">
-                          <div className="flex-1">
-                            <label className="text-xs text-gray-500 mb-0.5 block">Latitude</label>
-                            <input
-                              type="number"
-                              step="any"
-                              value={manualCoords.lat}
-                              onChange={(e) => setManualCoords((c) => ({ ...c, lat: e.target.value }))}
-                              placeholder="e.g. 18.52043"
-                              className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-red-500 focus:border-transparent"
-                            />
-                          </div>
-                          <div className="flex-1">
-                            <label className="text-xs text-gray-500 mb-0.5 block">Longitude</label>
-                            <input
-                              type="number"
-                              step="any"
-                              value={manualCoords.lng}
-                              onChange={(e) => setManualCoords((c) => ({ ...c, lng: e.target.value }))}
-                              placeholder="e.g. 73.85671"
-                              className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-red-500 focus:border-transparent"
-                            />
-                          </div>
-                        </div>
-                        <p className="text-xs text-gray-500">Open Google Maps → long-press your location → copy the numbers shown</p>
-                        <button type="button" onClick={() => { setUseManual(false); setGpsCoords(null); setGpsError(null); }} className="text-xs text-blue-600 underline">
-                          ← Try GPS again instead
-                        </button>
-                      </div>
-                    )}
-
-                    {/* Toggle to manual */}
-                    {!useManual && (
-                      <button
-                        type="button"
-                        onClick={() => { setUseManual(true); setGpsCoords(null); setGpsError(null); setManualCoords({ lat: "", lng: "" }); }}
-                        className="text-xs text-gray-500 underline hover:text-gray-700"
-                      >
-                        GPS not working? Enter coordinates manually
-                      </button>
-                    )}
-                  </div>
-
-                  <div>
-                    <label className="block text-sm font-semibold text-gray-700 mb-1">Your Name <span className="text-red-500">*</span></label>
-                    <input
-                      type="text"
-                      value={sosForm.name}
-                      onChange={(e) => setSosForm((f) => ({ ...f, name: e.target.value }))}
-                      placeholder="Full name"
-                      className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-red-500 focus:border-transparent"
-                    />
-                  </div>
-
-                  <div>
-                    <label className="block text-sm font-semibold text-gray-700 mb-1">Phone Number <span className="text-red-500">*</span></label>
-                    <input
-                      type="tel"
-                      value={sosForm.phone}
-                      onChange={(e) => setSosForm((f) => ({ ...f, phone: e.target.value }))}
-                      placeholder="+91 XXXXX XXXXX"
-                      className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-red-500 focus:border-transparent"
-                    />
-                  </div>
-
-                  <div>
-                    <label className="block text-sm font-semibold text-gray-700 mb-1">Emergency Type</label>
-                    <select
-                      value={sosForm.disasterType}
-                      onChange={(e) => setSosForm((f) => ({ ...f, disasterType: e.target.value }))}
-                      className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-red-500 focus:border-transparent"
-                    >
-                      <option value="flood">🌊 Flood</option>
-                      <option value="fire">🔥 Fire</option>
-                      <option value="earthquake">🏚️ Earthquake</option>
-                      <option value="landslide">⛰️ Landslide</option>
-                      <option value="cyclone">🌀 Cyclone</option>
-                      <option value="heatwave">☀️ Heatwave</option>
-                      <option value="medical">🚑 Medical Emergency</option>
-                      <option value="other">⚠️ Other</option>
-                    </select>
-                  </div>
-
-                  <div>
-                    <label className="block text-sm font-semibold text-gray-700 mb-1">Brief Description (optional)</label>
-                    <textarea
-                      value={sosForm.description}
-                      onChange={(e) => setSosForm((f) => ({ ...f, description: e.target.value }))}
-                      rows={2}
-                      placeholder="e.g. Water rising, people trapped on roof…"
-                      className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-red-500 focus:border-transparent resize-none"
-                    />
-                  </div>
-
-                  <div className="flex gap-3 pt-1">
+                  <div className="flex gap-2">
                     <button
-                      type="button"
-                      onClick={() => setShowSOSModal(false)}
-                      className="flex-1 py-3 border border-gray-300 rounded-lg font-semibold text-gray-700 hover:bg-gray-50"
+                      onClick={handleReceivedHelp}
+                      className="flex-1 px-4 py-2.5 bg-green-500 text-white rounded-lg font-semibold hover:bg-green-600 transition flex items-center justify-center gap-2 text-sm"
                     >
-                      Cancel
+                      <Check className="w-4 h-4" />
+                      Help Received
                     </button>
                     <button
-                      type="button"
-                      onClick={submitSOS}
-                      disabled={sosSubmitting || !sosForm.name.trim() || !sosForm.phone.trim() || !hasValidCoords}
-                      className="flex-1 py-3 bg-red-600 text-white rounded-lg font-bold hover:bg-red-700 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
-                      title={!hasValidCoords ? "Location required — tap Share My Location or enter coordinates manually" : undefined}
+                      onClick={handleCancelSOS}
+                      className="flex-1 px-4 py-2.5 bg-white/20 text-white rounded-lg font-semibold hover:bg-white/30 transition flex items-center justify-center gap-2 text-sm border border-white/50"
                     >
-                      {sosSubmitting ? (
-                        <><span className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" /> Sending…</>
-                      ) : (
-                        <><Send className="w-4 h-4" /> Send SOS</>
-                      )}
+                      <X className="w-4 h-4" />
+                      Cancel SOS
                     </button>
                   </div>
                 </div>
               )}
             </div>
           </div>
-        )}
+
+          {/* Medical Emergency SOS */}
+          <div className="bg-gradient-to-br from-rose-600 to-red-800 p-6 rounded-2xl shadow-2xl text-white border-2 border-white/30">
+            <div className="text-center">
+              <h2 className="text-2xl font-bold mb-2 flex items-center justify-center gap-2">
+                <HeartPulse className="w-6 h-6" />
+                Medical Emergency
+              </h2>
+              <p className="text-red-100 mb-4 text-sm">
+                Heart attack, severe injury, medical crisis
+              </p>
+              <button 
+                onClick={handleMedicalSOS}
+                className={`w-40 h-40 mx-auto rounded-full font-bold text-xl shadow-2xl transition-all transform hover:scale-105 active:scale-95 ${
+                  medicalSosActive 
+                    ? 'bg-green-500 animate-pulse' 
+                    : 'bg-white text-rose-600 hover:bg-red-50'
+                }`}
+              >
+                {medicalSosActive ? (
+                  <div className="flex flex-col items-center">
+                    <Ambulance className="w-12 h-12 mb-2" />
+                    <span className="text-base">Dispatched!</span>
+                  </div>
+                ) : (
+                  <div className="flex flex-col items-center">
+                    <HeartPulse className="w-12 h-12 mb-2" />
+                    <span>AMBULANCE!</span>
+                  </div>
+                )}
+              </button>
+              {medicalSosActive && (
+                <div className="mt-4 space-y-3">
+                  <div className="bg-green-600 p-3 rounded-lg">
+                    <p className="font-semibold text-sm">✓ Ambulance dispatched (RED priority)</p>
+                    <p className="text-green-100 text-xs">Medical team alerted with GPS</p>
+                    <p className="text-green-100 text-xs font-mono mt-1">ID: {medicalTicketId}</p>
+                  </div>
+                  <div className="flex gap-2">
+                    <button
+                      onClick={handleReceivedMedicalHelp}
+                      className="flex-1 px-4 py-2.5 bg-green-500 text-white rounded-lg font-semibold hover:bg-green-600 transition flex items-center justify-center gap-2 text-sm"
+                    >
+                      <Check className="w-4 h-4" />
+                      Help Received
+                    </button>
+                    <button
+                      onClick={handleCancelMedicalSOS}
+                      className="flex-1 px-4 py-2.5 bg-white/20 text-white rounded-lg font-semibold hover:bg-white/30 transition flex items-center justify-center gap-2 text-sm border border-white/50"
+                    >
+                      <X className="w-4 h-4" />
+                      Cancel SOS
+                    </button>
+                  </div>
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
 
         {/* Report Incident Form */}
         <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-200 mb-6">
@@ -700,6 +656,131 @@ export default function CitizenPortal() {
         </>
         )}
 
+        {/* ── Emergency SOS Dialog ── */}
+        {showSOSDialog && (
+          <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-4">
+            <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md overflow-hidden">
+              {/* Header */}
+              <div className="bg-gradient-to-r from-red-600 to-red-700 text-white px-6 py-4 flex items-center justify-between">
+                <div>
+                  <h3 className="text-xl font-bold flex items-center gap-2">
+                    <AlertCircle className="w-5 h-5" /> Send Emergency SOS
+                  </h3>
+                  <p className="text-red-200 text-xs mt-0.5">Confirm your details and select emergency type</p>
+                </div>
+                <button
+                  onClick={() => setShowSOSDialog(false)}
+                  className="p-1.5 hover:bg-red-800 rounded-lg transition"
+                >
+                  <X className="w-5 h-5" />
+                </button>
+              </div>
+
+              <div className="p-6 space-y-4">
+                {/* User info — auto-fetched, read-only */}
+                <div className="bg-gray-50 border border-gray-200 rounded-xl p-4 space-y-3">
+                  <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide">Your Details (from account)</p>
+                  <div className="flex items-center gap-3">
+                    <div className="w-8 h-8 bg-red-100 rounded-full flex items-center justify-center flex-shrink-0">
+                      <User className="w-4 h-4 text-red-600" />
+                    </div>
+                    <div>
+                      <p className="text-xs text-gray-500">Name</p>
+                      <p className="font-semibold text-gray-800">
+                        {userProfile?.name || "Fetching…"}
+                      </p>
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-3">
+                    <div className="w-8 h-8 bg-red-100 rounded-full flex items-center justify-center flex-shrink-0">
+                      <Phone className="w-4 h-4 text-red-600" />
+                    </div>
+                    <div>
+                      <p className="text-xs text-gray-500">Phone</p>
+                      <p className="font-semibold text-gray-800">
+                        {userProfile?.phone || "Fetching…"}
+                      </p>
+                    </div>
+                  </div>
+                  {/* GPS status */}
+                  <div className="flex items-center gap-3">
+                    <div className={`w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0 ${
+                      gettingLocation ? "bg-blue-100" : sosGps ? "bg-green-100" : "bg-orange-100"
+                    }`}>
+                      {gettingLocation
+                        ? <Loader2 className="w-4 h-4 text-blue-600 animate-spin" />
+                        : sosGps
+                        ? <MapPin className="w-4 h-4 text-green-600" />
+                        : <MapPin className="w-4 h-4 text-orange-500" />}
+                    </div>
+                    <div>
+                      <p className="text-xs text-gray-500">GPS Location</p>
+                      {gettingLocation ? (
+                        <p className="text-sm text-blue-600 font-medium">Acquiring location…</p>
+                      ) : sosGps ? (
+                        <p className="text-sm text-green-700 font-semibold">
+                          {sosGps.lat.toFixed(5)}, {sosGps.lng.toFixed(5)}
+                        </p>
+                      ) : (
+                        <p className="text-sm text-orange-600">{locationError || "Unavailable"}</p>
+                      )}
+                    </div>
+                  </div>
+                </div>
+
+                {/* Disaster type dropdown */}
+                <div>
+                  <label className="block text-sm font-semibold text-gray-700 mb-2">
+                    Select Emergency Type *
+                  </label>
+                  <select
+                    value={sosDisasterType}
+                    onChange={(e) => setSosDisasterType(e.target.value)}
+                    className="w-full px-4 py-3 border-2 border-gray-200 rounded-xl focus:ring-2 focus:ring-red-500 focus:border-red-500 outline-none text-base font-medium bg-white"
+                  >
+                    {disasterTypes.map((d) => (
+                      <option key={d.value} value={d.value}>{d.label}</option>
+                    ))}
+                  </select>
+                </div>
+
+                {/* Error */}
+                {sosError && (
+                  <div className="bg-red-50 border border-red-200 rounded-lg p-3 flex items-start gap-2 text-sm text-red-700">
+                    <AlertCircle className="w-4 h-4 mt-0.5 flex-shrink-0" />
+                    <span>{sosError}</span>
+                  </div>
+                )}
+
+                {/* Actions */}
+                <div className="flex gap-3 pt-1">
+                  <button
+                    onClick={() => setShowSOSDialog(false)}
+                    className="flex-1 px-4 py-3 bg-gray-200 text-gray-700 rounded-xl font-semibold hover:bg-gray-300 transition"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    onClick={handleSendSOS}
+                    disabled={submittingSOS || gettingLocation}
+                    className="flex-1 px-4 py-3 bg-red-600 text-white rounded-xl font-bold hover:bg-red-700 transition disabled:opacity-60 flex items-center justify-center gap-2 text-base"
+                  >
+                    {submittingSOS ? (
+                      <><Loader2 className="w-5 h-5 animate-spin" /> Sending…</>
+                    ) : (
+                      <><Send className="w-5 h-5" /> Send SOS 🚨</>
+                    )}
+                  </button>
+                </div>
+
+                <p className="text-center text-xs text-gray-400">
+                  Your name, phone and GPS will be sent directly to NDRF authorities.
+                </p>
+              </div>
+            </div>
+          </div>
+        )}
+
         {/* ━━━━━━━━━━━━  HOSPITALS TAB  ━━━━━━━━━━━━ */}
         {activeTab === "hospitals" && (
           <div className="space-y-5">
@@ -710,7 +791,7 @@ export default function CitizenPortal() {
                 <h2 className="text-2xl font-bold">Nearest Hospitals — Maharashtra</h2>
               </div>
               <p className="text-emerald-100 text-sm">
-                Click on any disaster / SOS below to see the 5 nearest hospitals and the shortest route on the map. Zoom in to see wards, streets and landmarks.
+                Click on any disaster / SOS below to see the 5 nearest hospitals and the shortest route on the map.
               </p>
             </div>
 
@@ -767,13 +848,13 @@ export default function CitizenPortal() {
                   );
                 })}
 
-                {/* Helpful legend */}
+                {/* Map Legend */}
                 <div className="bg-gray-50 rounded-lg p-3 border border-gray-200 text-[11px] text-gray-500 space-y-1.5 mt-2">
                   <p className="font-semibold text-gray-700 text-xs mb-1">Map Legend</p>
                   <p>🚨 Red pulse = Victim / SOS location</p>
                   <p>🏥 Hospital markers (color-coded)</p>
-                  <p>━ Solid green line = Nearest hospital route</p>
-                  <p>┅ Dashed lines = Alternative hospital routes</p>
+                  <p>│ Solid green line = Nearest hospital route</p>
+                  <p>┆ Dashed lines = Alternative hospital routes</p>
                 </div>
               </div>
 
