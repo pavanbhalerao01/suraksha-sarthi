@@ -1,5 +1,6 @@
 import prisma from '@/lib/db';
-import { PrismaClient } from '@prisma/client';
+import { PrismaClient, UserRole, UserStatus } from '@prisma/client';
+import { hashPassword } from '../lib/auth/password';
 
 const prismaClientForSeed = new PrismaClient();
 
@@ -247,6 +248,316 @@ async function main() {
 
   console.log('✅ Created sample infrastructure');
 
+  // ============================================================================
+  // DEMO ACCOUNTS (Authentication System)
+  // ============================================================================
+  
+  console.log('\n📌 Creating Demo Accounts...');
+  
+  // Super Admin
+  const superAdmin = await prismaClientForSeed.user.upsert({
+    where: { email: 'admin@survive.exe' },
+    update: {},
+    create: {
+      email: 'admin@survive.exe',
+      fullName: 'Super Administrator',
+      role: UserRole.super_admin,
+      status: UserStatus.active,
+      passwordHash: await hashPassword('SuperAdmin@2026!'),
+      phone: '+919999999999',
+      phoneVerified: true,
+      isDemo: true,
+    },
+  });
+  console.log('✅ Super Admin created');
+  
+  // Citizens (OTP Verified)
+  const citizens = [
+    { phone: '+919876543210', name: 'Ramesh Patil', email: 'ramesh.citizen@example.com' },
+    { phone: '+919876543211', name: 'Sunita Desai', email: 'sunita.citizen@example.com' },
+    { phone: '+919876543212', name: 'Akash Sharma', email: 'akash.citizen@example.com' },
+  ];
+  
+  for (const citizen of citizens) {
+    await prismaClientForSeed.user.upsert({
+      where: { email: citizen.email },
+      update: {},
+      create: {
+        email: citizen.email,
+        fullName: citizen.name,
+        phone: citizen.phone,
+        role: UserRole.citizen,
+        status: UserStatus.active,
+        phoneVerified: true,
+        isDemo: true,
+      },
+    });
+  }
+  console.log(`✅ Created ${citizens.length} citizens`);
+  
+  // NDRF Admins
+  const ndrfAdmins = [
+    { email: 'ndrf.command@survive.exe', name: 'Commander Rajesh Sharma', password: 'NDRF@Command2026', phone: '+919876500001' },
+    { email: 'ndrf.ops@survive.exe', name: 'Officer Priya Deshmukh', password: 'NDRF@Ops2026', phone: '+919876500002' },
+  ];
+  
+  for (const admin of ndrfAdmins) {
+    await prismaClientForSeed.user.upsert({
+      where: { email: admin.email },
+      update: {},
+      create: {
+        email: admin.email,
+        fullName: admin.name,
+        phone: admin.phone,
+        role: UserRole.ndrf_admin,
+        status: UserStatus.active,
+        passwordHash: await hashPassword(admin.password),
+        phoneVerified: true,
+        isDemo: true,
+      },
+    });
+  }
+  console.log(`✅ Created ${ndrfAdmins.length} NDRF admins`);
+  
+  // NDRF Field Team
+  const ndrfField = [
+    { email: 'ndrf.field1@survive.exe', name: 'Vikram Singh', password: 'NDRF@Field123', phone: '+919876501001', teamId: 'NDRF-MH-001', badge: 'NDRF-001', district: 'Pune' },
+    { email: 'ndrf.field2@survive.exe', name: 'Amit Patil', password: 'NDRF@Field456', phone: '+919876501002', teamId: 'NDRF-MH-002', badge: 'NDRF-002', district: 'Mumbai City' },
+    { email: 'ndrf.field3@survive.exe', name: 'Suresh Kumar', password: 'NDRF@Field789', phone: '+919876501003', teamId: 'NDRF-MH-003', badge: 'NDRF-003', district: 'Nashik' },
+  ];
+  
+  for (const member of ndrfField) {
+    const user = await prismaClientForSeed.user.upsert({
+      where: { email: member.email },
+      update: {},
+      create: {
+        email: member.email,
+        fullName: member.name,
+        phone: member.phone,
+        role: UserRole.ndrf,
+        status: UserStatus.active,
+        passwordHash: await hashPassword(member.password),
+        phoneVerified: true,
+        isDemo: true,
+      },
+    });
+    
+    await prismaClientForSeed.teamProfile.upsert({
+      where: { userId: user.id },
+      update: {},
+      create: {
+        userId: user.id,
+        teamType: 'ndrf',
+        teamId: member.teamId,
+        badgeNumber: member.badge,
+        department: 'National Disaster Response Force',
+        district: member.district,
+        state: 'Maharashtra',
+        specializations: ['flood_rescue', 'earthquake_response', 'search_rescue'],
+        onDuty: true,
+      },
+    });
+  }
+  console.log(`✅ Created ${ndrfField.length} NDRF field members`);
+  
+  // SDRF Field Team
+  const sdrfField = [
+    { email: 'sdrf.field1@survive.exe', name: 'Rahul Desai', password: 'SDRF@Field123', phone: '+919876502001', district: 'Pune' },
+    { email: 'sdrf.field2@survive.exe', name: 'Kiran Bhosale', password: 'SDRF@Field456', phone: '+919876502002', district: 'Satara' },
+  ];
+  
+  for (const member of sdrfField) {
+    const user = await prismaClientForSeed.user.upsert({
+      where: { email: member.email },
+      update: {},
+      create: {
+        email: member.email,
+        fullName: member.name,
+        phone: member.phone,
+        role: UserRole.sdrf,
+        status: UserStatus.active,
+        passwordHash: await hashPassword(member.password),
+        phoneVerified: true,
+        isDemo: true,
+      },
+    });
+    
+    await prismaClientForSeed.teamProfile.upsert({
+      where: { userId: user.id },
+      update: {},
+      create: {
+        userId: user.id,
+        teamType: 'sdrf',
+        department: 'State Disaster Response Force',
+        district: member.district,
+        state: 'Maharashtra',
+        specializations: ['flood_response', 'evacuation'],
+        onDuty: true,
+      },
+    });
+  }
+  console.log(`✅ Created ${sdrfField.length} SDRF field members`);
+  
+  // Fire Services
+  const fireTeam = [
+    { email: 'fire.team1@survive.exe', name: 'Fireman Ganesh Rao', password: 'Fire@Team123', phone: '+919876503001', district: 'Pune' },
+    { email: 'fire.team2@survive.exe', name: 'Fireman Sanjay Malik', password: 'Fire@Team456', phone: '+919876503002', district: 'Mumbai City' },
+  ];
+  
+  for (const member of fireTeam) {
+    const user = await prismaClientForSeed.user.upsert({
+      where: { email: member.email },
+      update: {},
+      create: {
+        email: member.email,
+        fullName: member.name,
+        phone: member.phone,
+        role: UserRole.fire,
+        status: UserStatus.active,
+        passwordHash: await hashPassword(member.password),
+        phoneVerified: true,
+        isDemo: true,
+      },
+    });
+    
+    await prismaClientForSeed.teamProfile.upsert({
+      where: { userId: user.id },
+      update: {},
+      create: {
+        userId: user.id,
+        teamType: 'fire',
+        department: 'Fire & Emergency Services',
+        district: member.district,
+        state: 'Maharashtra',
+        specializations: ['fire_rescue', 'building_collapse'],
+        onDuty: true,
+      },
+    });
+  }
+  console.log(`✅ Created ${fireTeam.length} fire services members`);
+  
+  // Police Team
+  const policeTeam = [
+    { email: 'police.team1@survive.exe', name: 'Inspector Anil Kulkarni', password: 'Police@Team123', phone: '+919876504001', district: 'Pune', badge: 'POL-1001' },
+    { email: 'police.team2@survive.exe', name: 'Constable Deepak More', password: 'Police@Team456', phone: '+919876504002', district: 'Mumbai City', badge: 'POL-2001' },
+  ];
+  
+  for (const member of policeTeam) {
+    const user = await prismaClientForSeed.user.upsert({
+      where: { email: member.email },
+      update: {},
+      create: {
+        email: member.email,
+        fullName: member.name,
+        phone: member.phone,
+        role: UserRole.police,
+        status: UserStatus.active,
+        passwordHash: await hashPassword(member.password),
+        phoneVerified: true,
+        isDemo: true,
+      },
+    });
+    
+    await prismaClientForSeed.teamProfile.upsert({
+      where: { userId: user.id },
+      update: {},
+      create: {
+        userId: user.id,
+        teamType: 'police',
+        badgeNumber: member.badge,
+        department: 'Maharashtra Police',
+        district: member.district,
+        state: 'Maharashtra',
+        specializations: ['crowd_control', 'security'],
+        onDuty: true,
+      },
+    });
+  }
+  console.log(`✅ Created ${policeTeam.length} police team members`);
+  
+  // Medical Emergency Team
+  const medicalTeam = [
+    { email: 'medical.team1@survive.exe', name: 'Dr. Sneha Joshi', password: 'Medical@Team123', phone: '+919876505001', district: 'Pune' },
+    { email: 'medical.team2@survive.exe', name: 'Paramedic Ravi Sharma', password: 'Medical@Team456', phone: '+919876505002', district: 'Mumbai City' },
+  ];
+  
+  try {
+    for (const member of medicalTeam) {
+      const user = await prismaClientForSeed.user.upsert({
+        where: { email: member.email },
+        update: {},
+        create: {
+          email: member.email,
+          fullName: member.name,
+          phone: member.phone,
+          role: UserRole.medical,
+          status: UserStatus.active,
+          passwordHash: await hashPassword(member.password),
+          phoneVerified: true,
+          isDemo: true,
+        },
+      });
+      
+      await prismaClientForSeed.teamProfile.upsert({
+        where: { userId: user.id },
+        update: {},
+        create: {
+          userId: user.id,
+          teamType: 'medical',
+          department: 'Emergency Medical Services',
+          district: member.district,
+          state: 'Maharashtra',
+          specializations: ['emergency_care', 'trauma_treatment'],
+          onDuty: true,
+        },
+      });
+    }
+    console.log(`✅ Created ${medicalTeam.length} medical team members`);
+  } catch (error) {
+    console.error('❌ Error creating medical team:', error);
+    throw error;
+  }
+  
+  // Ambulance Drivers
+  const ambulanceDrivers = [
+    { email: 'ambulance.driver1@survive.exe', name: 'Driver Mahesh Pawar', password: 'Ambulance@123', phone: '+919876506001', vehicle: 'AMB-101', district: 'Pune' },
+    { email: 'ambulance.driver2@survive.exe', name: 'Driver Sunil Kadam', password: 'Ambulance@456', phone: '+919876506002', vehicle: 'AMB-102', district: 'Mumbai City' },
+    { email: 'ambulance.driver3@survive.exe', name: 'Driver Rajesh Bhoir', password: 'Ambulance@789', phone: '+919876506003', vehicle: 'AMB-103', district: 'Nashik' },
+  ];
+  
+  for (const member of ambulanceDrivers) {
+    const user = await prismaClientForSeed.user.upsert({
+      where: { email: member.email },
+      update: {},
+      create: {
+        email: member.email,
+        fullName: member.name,
+        phone: member.phone,
+        role: UserRole.ambulance,
+        status: UserStatus.active,
+        passwordHash: await hashPassword(member.password),
+        phoneVerified: true,
+        isDemo: true,
+      },
+    });
+    
+    await prismaClientForSeed.teamProfile.upsert({
+      where: { userId: user.id },
+      update: {},
+      create: {
+        userId: user.id,
+        teamType: 'ambulance',
+        teamId: member.vehicle,
+        department: 'Ambulance Services',
+        district: member.district,
+        state: 'Maharashtra',
+        specializations: ['patient_transport', 'emergency_driving'],
+        onDuty: true,
+      },
+    });
+  }
+  console.log(`✅ Created ${ambulanceDrivers.length} ambulance drivers`);
+
   console.log('\n🎉 Database seeded successfully!');
   console.log(`📊 Summary:`);
   console.log(`   - 1 state (Maharashtra)`);
@@ -254,6 +565,7 @@ async function main() {
   console.log(`   - ${riskScores.length} risk scores`);
   console.log(`   - ${historicalDisasters.length} historical disasters`);
   console.log(`   - 3 infrastructure items`);
+  console.log(`   - 20 demo user accounts (1 super admin, 3 citizens, 16 team members)`);
 }
 
 main()

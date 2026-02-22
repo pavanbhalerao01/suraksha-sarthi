@@ -13,17 +13,96 @@ import {
   Clock,
   Shield,
   Navigation,
-  Upload
+  Upload,
+  HeartPulse,
+  Ambulance,
+  X,
+  Check
 } from "lucide-react";
 
 export default function CitizenPortal() {
   const [sosActive, setSosActive] = useState(false);
+  const [medicalSosActive, setMedicalSosActive] = useState(false);
   const [showReportForm, setShowReportForm] = useState(false);
+  const [sosTicketId, setSosTicketId] = useState("");
+  const [medicalTicketId, setMedicalTicketId] = useState("");
 
   const handleSOS = () => {
+    const ticketId = "SOS-2025-" + Math.random().toString(36).substr(2, 9).toUpperCase();
     setSosActive(true);
+    setSosTicketId(ticketId);
     // In production: Get GPS location, send to backend immediately
-    alert("🚨 SOS ACTIVATED!\n\nYour location and emergency alert have been sent to authorities.\nHelp is on the way.\n\nTicket ID: SOS-2025-" + Math.random().toString(36).substr(2, 9).toUpperCase());
+    alert(`🚨 SOS ACTIVATED!\n\nYour location and emergency alert have been sent to authorities.\nHelp is on the way.\n\nTicket ID: ${ticketId}`);
+  };
+  
+  const handleCancelSOS = () => {
+    if (confirm("Are you sure you want to cancel this SOS?\n\nOnly cancel if the emergency is resolved or was sent by mistake.")) {
+      setSosActive(false);
+      setSosTicketId("");
+      alert(`✓ SOS Cancelled\n\nTicket ${sosTicketId} has been cancelled.\nAuthorities have been notified.`);
+    }
+  };
+  
+  const handleReceivedHelp = () => {
+    if (confirm("Have you received help from authorities?\n\nClick OK to mark this emergency as resolved.")) {
+      setSosActive(false);
+      setSosTicketId("");
+      alert(`✓ Help Received - Emergency Resolved\n\nTicket ${sosTicketId} marked as complete.\nThank you for using Survive.exe. Stay safe!`);
+    }
+  };
+  
+  const handleCancelMedicalSOS = () => {
+    if (confirm("Are you sure you want to cancel this Medical SOS?\n\nOnly cancel if help is no longer needed or was sent by mistake.")) {
+      setMedicalSosActive(false);
+      setMedicalTicketId("");
+      alert(`✓ Medical SOS Cancelled\n\nTicket ${medicalTicketId} has been cancelled.\nAmbulance and medical team have been notified.`);
+    }
+  };
+  
+  const handleReceivedMedicalHelp = () => {
+    if (confirm("Have you received medical assistance?\n\nClick OK to mark this medical emergency as resolved.")) {
+      setMedicalSosActive(false);
+      setMedicalTicketId("");
+      alert(`✓ Medical Help Received - Emergency Resolved\n\nTicket ${medicalTicketId} marked as complete.\nWe hope you're safe. Take care!`);
+    }
+  };
+
+  const handleMedicalSOS = async () => {
+    setMedicalSosActive(true);
+    const ticketId = "MED-SOS-" + Date.now().toString(36).toUpperCase();
+    setMedicalTicketId(ticketId);
+    
+    // Get GPS location
+    if (navigator.geolocation) {
+      navigator.geolocation.getCurrentPosition(
+        (position) => {
+          // In production: Send to medical team API
+          // This would create a patient entry with RED triage priority
+          const medicalSosData = {
+            ticketId,
+            type: 'medical_emergency',
+            priority: 'RED',
+            coordinates: {
+              lat: position.coords.latitude,
+              lng: position.coords.longitude,
+            },
+            timestamp: new Date().toISOString(),
+            status: 'pending',
+            patientName: 'Emergency SOS Caller',
+            condition: 'Medical Emergency - Immediate Attention Required',
+          };
+          
+          console.log('Medical SOS Data:', medicalSosData);
+          
+          alert(`🚑 MEDICAL EMERGENCY SOS ACTIVATED!\n\n✓ Ambulance dispatched to your location\n✓ Medical team alerted with RED priority\n✓ GPS coordinates shared\n\nTicket ID: ${ticketId}\n\nHelp is on the way! Stay calm and stay on the line if you called emergency services.`);
+        },
+        (error) => {
+          alert(`🚑 MEDICAL EMERGENCY SOS ACTIVATED!\n\nTicket ID: ${ticketId}\n\n⚠️ GPS unavailable, but medical team has been alerted.\n\nPlease provide your location to emergency responders.`);
+        }
+      );
+    } else {
+      alert(`🚑 MEDICAL EMERGENCY SOS ACTIVATED!\n\nTicket ID: ${ticketId}\n\nMedical team has been alerted.\nPlease provide your location when they contact you.`);
+    }
   };
 
   return (
@@ -50,39 +129,119 @@ export default function CitizenPortal() {
       </header>
 
       <div className="max-w-4xl mx-auto px-4 py-6">
-        {/* SOS Button - Most Prominent */}
-        <div className="bg-gradient-to-br from-red-600 to-red-700 p-8 rounded-2xl shadow-2xl mb-6 text-white">
-          <div className="text-center">
-            <h2 className="text-3xl font-bold mb-3">Emergency SOS</h2>
-            <p className="text-red-100 mb-6">
-              Press button below if you need immediate help. Your location will be shared with rescue teams.
-            </p>
-            <button 
-              onClick={handleSOS}
-              className={`w-48 h-48 mx-auto rounded-full font-bold text-2xl shadow-2xl transition-all transform hover:scale-105 active:scale-95 ${
-                sosActive 
-                  ? 'bg-green-500 animate-pulse' 
-                  : 'bg-white text-red-600 hover:bg-red-50'
-              }`}
-            >
-              {sosActive ? (
-                <div className="flex flex-col items-center">
-                  <CheckCircle className="w-16 h-16 mb-2" />
-                  <span className="text-lg">SOS Sent!</span>
-                </div>
-              ) : (
-                <div className="flex flex-col items-center">
-                  <AlertCircle className="w-16 h-16 mb-2" />
-                  <span>HELP!</span>
+        {/* Emergency SOS Buttons Grid */}
+        <div className="grid md:grid-cols-2 gap-6 mb-6">
+          {/* General Emergency SOS */}
+          <div className="bg-gradient-to-br from-red-600 to-red-700 p-6 rounded-2xl shadow-2xl text-white">
+            <div className="text-center">
+              <h2 className="text-2xl font-bold mb-2">Emergency SOS</h2>
+              <p className="text-red-100 mb-4 text-sm">
+                Immediate danger, disaster, or life-threatening situation
+              </p>
+              <button 
+                onClick={handleSOS}
+                className={`w-40 h-40 mx-auto rounded-full font-bold text-xl shadow-2xl transition-all transform hover:scale-105 active:scale-95 ${
+                  sosActive 
+                    ? 'bg-green-500 animate-pulse' 
+                    : 'bg-white text-red-600 hover:bg-red-50'
+                }`}
+              >
+                {sosActive ? (
+                  <div className="flex flex-col items-center">
+                    <CheckCircle className="w-12 h-12 mb-2" />
+                    <span className="text-base">SOS Sent!</span>
+                  </div>
+                ) : (
+                  <div className="flex flex-col items-center">
+                    <AlertCircle className="w-12 h-12 mb-2" />
+                    <span>HELP!</span>
+                  </div>
+                )}
+              </button>
+              {sosActive && (
+                <div className="mt-4 space-y-3">
+                  <div className="bg-green-600 p-3 rounded-lg">
+                    <p className="font-semibold text-sm">✓ Authorities alerted</p>
+                    <p className="text-green-100 text-xs">Help is on the way</p>
+                    <p className="text-green-100 text-xs font-mono mt-1">ID: {sosTicketId}</p>
+                  </div>
+                  <div className="flex gap-2">
+                    <button
+                      onClick={handleReceivedHelp}
+                      className="flex-1 px-4 py-2.5 bg-green-500 text-white rounded-lg font-semibold hover:bg-green-600 transition flex items-center justify-center gap-2 text-sm"
+                    >
+                      <Check className="w-4 h-4" />
+                      Received Help
+                    </button>
+                    <button
+                      onClick={handleCancelSOS}
+                      className="flex-1 px-4 py-2.5 bg-white/20 text-white rounded-lg font-semibold hover:bg-white/30 transition flex items-center justify-center gap-2 text-sm border border-white/50"
+                    >
+                      <X className="w-4 h-4" />
+                      Cancel SOS
+                    </button>
+                  </div>
                 </div>
               )}
-            </button>
-            {sosActive && (
-              <div className="mt-4 bg-green-600 p-3 rounded-lg">
-                <p className="font-semibold">✓ Authorities have been alerted</p>
-                <p className="text-green-100 text-sm">Ticket ID: SOS-2025-ABC123</p>
-              </div>
-            )}
+            </div>
+          </div>
+
+          {/* Medical Emergency SOS */}
+          <div className="bg-gradient-to-br from-rose-600 to-red-800 p-6 rounded-2xl shadow-2xl text-white border-2 border-white/30">
+            <div className="text-center">
+              <h2 className="text-2xl font-bold mb-2 flex items-center justify-center gap-2">
+                <HeartPulse className="w-6 h-6" />
+                Medical Emergency
+              </h2>
+              <p className="text-red-100 mb-4 text-sm">
+                Heart attack, severe injury, medical crisis
+              </p>
+              <button 
+                onClick={handleMedicalSOS}
+                className={`w-40 h-40 mx-auto rounded-full font-bold text-xl shadow-2xl transition-all transform hover:scale-105 active:scale-95 ${
+                  medicalSosActive 
+                    ? 'bg-green-500 animate-pulse' 
+                    : 'bg-white text-rose-600 hover:bg-red-50'
+                }`}
+              >
+                {medicalSosActive ? (
+                  <div className="flex flex-col items-center">
+                    <Ambulance className="w-12 h-12 mb-2" />
+                    <span className="text-base">Dispatched!</span>
+                  </div>
+                ) : (
+                  <div className="flex flex-col items-center">
+                    <HeartPulse className="w-12 h-12 mb-2" />
+                    <span>AMBULANCE!</span>
+                  </div>
+                )}
+              </button>
+              {medicalSosActive && (
+                <div className="mt-4 space-y-3">
+                  <div className="bg-green-600 p-3 rounded-lg">
+                    <p className="font-semibold text-sm">✓ Ambulance dispatched (RED priority)</p>
+                    <p className="text-green-100 text-xs">Medical team alerted with GPS</p>
+                    <p className="text-green-100 text-xs font-mono mt-1">ID: {medicalTicketId}</p>
+                  </div>
+                  <div className="flex gap-2">
+                    <button
+                      onClick={handleReceivedMedicalHelp}
+                      className="flex-1 px-4 py-2.5 bg-green-500 text-white rounded-lg font-semibold hover:bg-green-600 transition flex items-center justify-center gap-2 text-sm"
+                    >
+                      <Check className="w-4 h-4" />
+                      Help Received
+                    </button>
+                    <button
+                      onClick={handleCancelMedicalSOS}
+                      className="flex-1 px-4 py-2.5 bg-white/20 text-white rounded-lg font-semibold hover:bg-white/30 transition flex items-center justify-center gap-2 text-sm border border-white/50"
+                    >
+                      <X className="w-4 h-4" />
+                      Cancel SOS
+                    </button>
+                  </div>
+                </div>
+              )}
+            </div>
           </div>
         </div>
 
