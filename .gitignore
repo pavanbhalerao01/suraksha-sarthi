@@ -43,6 +43,18 @@ venv/
 ENV/
 env/
 
+# SQLite databases
+*.db
+*.sqlite
+*.sqlite3
+
+# OTP / session stores
+otp-store.json
+
+# Backend env
+backend/.env
+backend/.env.local
+
 # ML Models
 ml_service/saved_models/*.h5
 ml_service/saved_models/*.pkl
