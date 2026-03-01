@@ -1,0 +1,687 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// Regions (Districts, Talukas, Wards)
+model Region {
+  id            String   @id @default(cuid())
+  name          String
+  type          String   // 'state', 'district', 'taluka', 'ward'
+  parentId      String?
+  parent        Region?  @relation("RegionHierarchy", fields: [parentId], references: [id])
+  children      Region[] @relation("RegionHierarchy")
+  
+  // Geographic data (stored as JSON strings in SQLite)
+  geometry      String?    // GeoJSON polygon (as string)
+  centroid      String?    // GeoJSON point (as string)
+  
+  population    Int?
+  areaSqKm      Float?
+  
+  riskScores    RiskScore[]
+  disasters     Disaster[]
+  infrastructure Infrastructure[]
+  
+  // Multi-user system relations
+  userProfiles  UserProfile[]  @relation("DistrictUsers")
+  incidents     Incident[]     @relation("RegionIncidents")
+  volunteers    Volunteer[]    @relation("VolunteerRegion")
+  tasks         Task[]         @relation("TaskRegion")
+  resources     Resource[]     @relation("ResourceRegion")
+  
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+  
+  @@index([type])
+  @@index([parentId])
+}
+
+// Risk Scores (Time-series data)
+model RiskScore {
+  id                String   @id @default(cuid())
+  regionId          String
+  region            Region   @relation(fields: [regionId], references: [id])
+  
+  timestamp         DateTime @default(now())
+  riskScore         Float    // 0-100
+  primaryHazard     String   // 'flood', 'drought', 'earthquake', 'heatwave'
+  
+  // Contributing factors (stored as JSON string in SQLite)
+  factors           String?    // { "heavy_rainfall": 0.8, "saturated_soil": 0.6 }
+  
+  modelVersion      String?
+  confidence        Float?   // 0-1
+  
+  @@index([regionId, timestamp])
+  @@index([timestamp])
+}
+
+// Historical Disasters
+model Disaster {
+  id              String   @id @default(cuid())
+  type            String   // 'flood', 'drought', 'earthquake', etc.
+  name            String?  // e.g., "July 2019 Pune Floods"
+  
+  startDate       DateTime
+  endDate         DateTime?
+  
+  regionId        String
+  region          Region   @relation(fields: [regionId], references: [id])
+  
+  severity        String   // 'minor', 'moderate', 'severe', 'catastrophic'
+  casualties      Int?
+  economicLossCr  Float?   // in Crores
+  
+  description     String?
+  source          String?  // 'NDMA', 'PMC', 'News'
+  
+  createdAt       DateTime @default(now())
+  
+  @@index([regionId])
+  @@index([startDate])
+}
+
+// Infrastructure (Buildings, Bridges, etc.)
+model Infrastructure {
+  id                  String   @id @default(cuid())
+  name                String
+  type                String   // 'bridge', 'hospital', 'school', 'dam'
+  
+  regionId            String
+  region              Region   @relation(fields: [regionId], references: [id])
+  
+  location            String     // GeoJSON point { lat, lng } as string
+  
+  constructionYear    Int?
+  vulnerabilityScore  Float?   // 0-100
+  lastAssessmentDate  DateTime?
+  
+  createdAt           DateTime @default(now())
+  updatedAt           DateTime @updatedAt
+  
+  @@index([regionId])
+  @@index([type])
+}
+
+// Alert History
+model Alert {
+  id          String   @id @default(cuid())
+  regionIds   String   // Comma-separated region IDs
+  
+  severity    String   // 'watch', 'advisory', 'warning', 'critical'
+  type        String   // 'flood', 'drought', etc.
+  
+  message     String
+  language    String   @default("en") // 'en', 'mr', 'hi'
+  
+  channels    String   // Comma-separated: 'sms,push,email'
+  recipients  Int?     // Number of people notified
+  
+  sentAt      DateTime @default(now())
+  expiresAt   DateTime?
+  
+  @@index([sentAt])
+}
+
+// Weather Data (from IMD)
+model WeatherData {
+  id            String   @id @default(cuid())
+  stationId     String
+  stationName   String?
+  
+  timestamp     DateTime
+  
+  temperature   Float?   // Celsius
+  humidity      Float?   // Percentage
+  rainfallMm    Float?
+  windSpeedKmh  Float?
+  pressure      Float?   // hPa
+  
+  // Store raw IMD response for reference (as JSON string)
+  rawData       String?
+  
+  createdAt     DateTime @default(now())
+  
+  @@index([stationId, timestamp])
+  @@index([timestamp])
+}
+
+// ==================== MULTI-USER SYSTEM ====================
+
+enum UserRole {
+  NDRF_ADMIN      // Full access to coordination dashboard
+  COLLECTOR       // District Collector view-only + direct NDRF communication
+  CITIZEN         // SOS and incident reporting
+  VOLUNTEER       // Task assignment and check-in
+  NGO             // Resource contribution and tracking
+  EVACUEE         // People in relief camps
+}
+
+enum UserStatus {
+  pending
+  active
+  suspended
+  deleted
+}
+
+enum VolunteerStatus {
+  PENDING         // Registration submitted
+  VERIFIED        // Ward office verified
+  ACTIVE          // Available for deployment
+  ON_DUTY         // Currently deployed
+  INACTIVE        // Not available
+  SUSPENDED       // Suspended by authority
+}
+
+enum IncidentStatus {
+  REPORTED        // Just reported by citizen
+  VERIFIED        // Verified by authority
+  ASSIGNED        // Team assigned
+  IN_PROGRESS     // Team on site
+  RESOLVED        // Incident resolved
+  CLOSED          // Closed by authority
+}
+
+enum TaskStatus {
+  PENDING         // Task created
+  ASSIGNED        // Assigned to volunteer
+  ACCEPTED        // Volunteer accepted
+  IN_PROGRESS     // Volunteer checked in
+  COMPLETED       // Task completed
+  VERIFIED        // Verified by authority
+}
+
+// User accounts with role-based access
+model User {
+  id                String   @id @default(cuid())
+  email             String   @unique
+  phone             String?  @unique
+  passwordHash      String
+  password_hash     String?  @map("password_hash")
+  
+  role              UserRole  // NDRF_ADMIN, COLLECTOR, CITIZEN, VOLUNTEER, NGO
+  status            UserStatus @default(active)
+  name              String
+  
+  isActive          Boolean  @default(true)
+  lastLogin         DateTime?
+
+  // OTP fields
+  otp              String?
+  otpExpires       DateTime?
+  
+  // Relationships
+  profile           UserProfile?
+  sessions          Session[]
+  incidentsReported Incident[]  @relation("ReportedBy")
+  incidentsAssigned Incident[]  @relation("AssignedTo")
+  volunteerProfile  Volunteer?
+  ngoProfile        NGO?
+  teamProfile       TeamProfile?
+  validationQueue   ValidationQueue[]  @relation("ValidationUser")
+  validatedUsers    ValidationQueue[]  @relation("ValidationReviewer")
+  auditLogs         AuditLog[]
+  
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+  
+  @@index([email])
+  @@index([role])
+}
+
+// Extended user profiles
+model UserProfile {
+  id              String   @id @default(cuid())
+  userId          String   @unique
+  user            User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  
+  districtId      String?  // For Collectors and field officers
+  district        Region?  @relation("DistrictUsers", fields: [districtId], references: [id])
+  
+  organization    String?  // NDRF battalion, NGO name
+  designation     String?  // Collector, Commandant, etc.
+  
+  address         String?
+  emergencyContact String?
+  
+  // Evacuee-specific fields
+  reliefCampId    String?  // Relief camp location ID
+  evacuatedFrom   String?  // Original address before evacuation
+  evacuationDate  DateTime?
+  familyMembers   Int?     // Number of family members
+  medicalNeeds    String?  // Medical conditions or requirements
+  aadhaarNumber   String?  // For identity verification
+  
+  // Permissions (stored as JSON string)
+  permissions     String?  // ["view_incidents", "assign_teams", "export_data"]
+  
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+  
+  @@index([districtId])
+}
+
+// Authentication sessions
+model Session {
+  id              String   @id @default(cuid())
+  userId          String
+  user            User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  
+  token           String   @unique
+  deviceInfo      String?  // Browser, OS, IP
+  
+  expiresAt       DateTime
+  createdAt       DateTime @default(now())
+  
+  @@index([userId])
+  @@index([token])
+}
+
+// Incidents reported by citizens or detected by system
+model Incident {
+  id              String          @id @default(cuid())
+  type            String          // 'flood', 'building_collapse', 'fire', 'medical_emergency'
+  title           String
+  description     String
+  
+  status          String          @default("REPORTED") // REPORTED, VERIFIED, ASSIGNED, IN_PROGRESS, RESOLVED, CLOSED
+  severity        String          // 'low', 'medium', 'high', 'critical'
+  
+  location        String          // GeoJSON point { lat, lng }
+  address         String?
+  regionId        String?
+  region          Region?         @relation("RegionIncidents", fields: [regionId], references: [id])
+  
+  reportedById    String
+  reportedBy      User            @relation("ReportedBy", fields: [reportedById], references: [id])
+  
+  assignedToId    String?
+  assignedTo      User?           @relation("AssignedTo", fields: [assignedToId], references: [id])
+  
+  // Photos uploaded by citizen (stored as JSON array of URLs)
+  photos          String?         // ["url1", "url2"]
+  
+  peopleAffected  Int?
+  resourcesNeeded String?         // "medical_kit:5,food_packets:100"
+  
+  resolvedAt      DateTime?
+  closedAt        DateTime?
+  
+  createdAt       DateTime        @default(now())
+  updatedAt       DateTime        @updatedAt
+  
+  @@index([status])
+  @@index([reportedById])
+  @@index([assignedToId])
+  @@index([createdAt])
+}
+
+// Volunteer profiles
+model Volunteer {
+  id              String          @id @default(cuid())
+  userId          String          @unique
+  user            User            @relation(fields: [userId], references: [id], onDelete: Cascade)
+  
+  status          String          @default("PENDING") // PENDING, VERIFIED, ACTIVE, ON_DUTY, INACTIVE, SUSPENDED
+  
+  // Skills (stored as JSON array)
+  skills          String          // ["first_aid", "swimming", "driving"]
+  
+  // Verification
+  verifiedBy      String?         // Ward office name
+  verifiedAt      DateTime?
+  idProofUrl      String?         // Uploaded ID document
+  
+  // Location preferences
+  preferredRegionId String?
+  preferredRegion   Region?       @relation("VolunteerRegion", fields: [preferredRegionId], references: [id])
+  
+  // Availability
+  isAvailable     Boolean         @default(true)
+  currentLocation String?         // GeoJSON point for geofencing
+  
+  // Statistics
+  tasksCompleted  Int             @default(0)
+  hoursServed     Float           @default(0)
+  rating          Float?          // 0-5 stars
+  
+  tasks           Task[]
+  
+  createdAt       DateTime        @default(now())
+  updatedAt       DateTime        @updatedAt
+  
+  @@index([status])
+  @@index([isAvailable])
+  @@index([preferredRegionId])
+}
+
+// Tasks for volunteers
+model Task {
+  id              String      @id @default(cuid())
+  title           String
+  description     String
+  
+  status          String      @default("PENDING") // PENDING, ASSIGNED, ACCEPTED, IN_PROGRESS, COMPLETED, VERIFIED
+  type            String      // 'rescue', 'relief_distribution', 'medical_assistance'
+  
+  location        String      // GeoJSON point
+  regionId        String?
+  region          Region?     @relation("TaskRegion", fields: [regionId], references: [id])
+  
+  assignedToId    String?
+  assignedTo      Volunteer?  @relation(fields: [assignedToId], references: [id])
+  
+  requiredSkills  String?     // ["first_aid", "swimming"]
+  priority        String      // 'low', 'medium', 'high', 'urgent'
+  
+  estimatedHours  Float?
+  
+  acceptedAt      DateTime?
+  startedAt       DateTime?
+  completedAt     DateTime?
+  verifiedAt      DateTime?
+  
+  createdAt       DateTime    @default(now())
+  updatedAt       DateTime    @updatedAt
+  
+  @@index([status])
+  @@index([assignedToId])
+  @@index([regionId])
+}
+
+// NGO profiles  
+model NGO {
+  id              String      @id @default(cuid())
+  userId          String      @unique
+  user            User        @relation(fields: [userId], references: [id], onDelete: Cascade)
+  
+  organizationName String
+  registrationNo  String?     // 80G/12A registration
+  contactPerson   String
+  
+  // Capabilities
+  resourceTypes   String      // ["food", "medical_supplies", "shelter"]
+  serviceAreas    String      // ["Maharashtra", "Pune"]
+  
+  // Verification
+  isVerified      Boolean     @default(false)
+  verifiedBy      String?
+  verifiedAt      DateTime?
+  
+  resources       Resource[]
+  
+  createdAt       DateTime    @default(now())
+  updatedAt       DateTime    @updatedAt
+  
+  @@index([isVerified])
+}
+
+// Resources contributed by NGOs
+model Resource {
+  id              String      @id @default(cuid())
+  ngoId           String
+  ngo             NGO         @relation(fields: [ngoId], references: [id])
+  
+  type            String      // 'food', 'medical', 'shelter', 'vehicle'
+  name            String
+  quantity        Int
+  unit            String      // 'packets', 'liters', 'units'
+  
+  location        String      // GeoJSON point where resource is available
+  regionId        String?
+  region          Region?     @relation("ResourceRegion", fields: [regionId], references: [id])
+  
+  status          String      // 'available', 'allocated', 'delivered'
+  allocatedTo     String?     // Incident ID or relief camp ID
+  
+  expiresAt       DateTime?   // For perishable items
+  
+  createdAt       DateTime    @default(now())
+  updatedAt       DateTime    @updatedAt
+  
+  @@index([ngoId])
+  @@index([status])
+  @@index([regionId])
+}
+
+// Resource Requests from Relief Camps/Authorities to NGOs
+model ResourceRequest {
+  id                String              @id @default(cuid())
+  
+  // Request Details
+  resourceType      String              // 'Food Supplies', 'Medical Supplies', 'Shelter Material'
+  quantity          String              // '500 packets', '100 tents'
+  urgency           String              // 'low', 'medium', 'high', 'urgent'
+  location          String              // Delivery location or relief camp
+  description       String?             // Additional details
+  
+  // Requester Details
+  requestedBy       String              // 'NDRF Command', 'District Collector', 'Relief Camp Incharge'
+  requestedByUserId String?             // User ID if authenticated
+  requestedByTeam   String?             // Team type (relief-camp, ndrf, collector)
+  
+  // Status Tracking
+  status            String              @default("pending") // 'pending', 'responded', 'fulfilled', 'cancelled'
+  
+  // Response Details (when NGO responds)
+  respondedByNgoId  String?             
+  deliveryPercentage Int?               // Percentage of requested quantity (0-100)
+  deliveryMethod    String?             // 'deliver' or 'pickup'
+  deliveryLocation  String?             // Relief camp name or pickup coordinates
+  estimatedDeliveryTime String?         // Time estimate
+  notes             String?             // Additional notes from NGO
+  respondedAt       DateTime?
+  
+  fulfilledAt       DateTime?           // When marked as delivered/fulfilled
+  
+  createdAt         DateTime            @default(now())
+  updatedAt         DateTime            @updatedAt
+  
+  @@index([status])
+  @@index([requestedByUserId])
+  @@index([respondedByNgoId])
+  @@index([createdAt])
+}
+
+// SOS Alerts sent to volunteers
+model SosAlert {
+  id                String      @id @default(cuid())
+  
+  // Incident details
+  incidentId        String      // Reference to the disaster/incident
+  disasterType      String      // 'flood', 'fire', 'building_collapse', etc.
+  title             String
+  description       String
+  severity          String      // 'low', 'medium', 'high', 'critical'
+  
+  // Location details
+  location          String      // GeoJSON point { lat, lng }
+  address           String
+  
+  // Complainant/Reporter details
+  reporterName      String
+  reporterPhone     String
+  
+  // Required skills for this disaster
+  requiredSkills    String      // JSON array: ["diver", "swimmer", "boat_operator"]
+  
+  // Alert metadata
+  sentBy            String      // Admin user ID who triggered the SOS
+  sentAt            DateTime    @default(now())
+  
+  // Volunteers notified (stored as JSON array of volunteer IDs)
+  volunteersNotified String     // ["vol-id-1", "vol-id-2", "vol-id-3"]
+  totalVolunteersNotified Int   @default(0)
+  
+  // Response tracking
+  volunteersResponded  String?  // JSON array of volunteer IDs who responded
+  totalVolunteersResponded Int  @default(0)
+  
+  createdAt         DateTime    @default(now())
+  updatedAt         DateTime    @updatedAt
+  
+  @@index([incidentId])
+  @@index([sentAt])
+  @@index([disasterType])
+}
+
+// Team SOS Assignments - Links forwarded SOS from admin to a team
+model TeamSosAssignment {
+  id               String    @id @default(cuid())
+
+  // Original SOS reference
+  sosId            String    // e.g., "sos-001"
+  title            String
+  description      String
+  disasterType     String
+  severity         String    // 'LOW', 'HIGH', 'CRITICAL'
+  address          String
+  lat              Float?    // Victim latitude
+  lng              Float?    // Victim longitude
+  reporterName     String
+  reporterPhone    String
+  injuredCount     Int       @default(0)
+  affectedFamilies Int       @default(0)
+
+  // Team details
+  teamType         String    // 'ndrf', 'sdrf', 'fire', 'police', 'medical', 'civil-defense'
+  teamId           String    // e.g., "NDRF-001"
+  teamName         String    // e.g., "NDRF Field Team"
+
+  // Assignment metadata
+  assignedBy       String    @default("NDRF_ADMIN")
+  assignedAt       DateTime  @default(now())
+
+  // Status lifecycle
+  status           String    @default("ASSIGNED") // ASSIGNED | IN_PROGRESS | RESOLVED
+
+  responseStartedAt DateTime?
+  resolvedAt        DateTime?
+
+  createdAt         DateTime  @default(now())
+  updatedAt         DateTime  @updatedAt
+
+  @@index([teamType])
+  @@index([teamId])
+  @@index([status])
+  @@index([sosId])
+}
+
+// ML Predictions stored from Python backend
+model MLPrediction {
+  id             String   @id @default(cuid())
+  type           String   // 'cyclone', 'flood', 'heatwave'
+  state          String
+  district       String
+  severity       String   // 'LOW', 'MEDIUM', 'HIGH', 'CRITICAL'
+  confidence     Float    // 0-100
+  predictedDate  String
+  affectedArea   String?
+  affectedPeople String?
+  description    String?
+  model          String?  // ML model name used
+  lat            Float?
+  lon            Float?
+  fetchedAt      DateTime @default(now())
+
+  @@index([type])
+  @@index([severity])
+  @@index([fetchedAt])
+}
+
+// ===========================================================================
+// AUTHENTICATION MODELS - from development branch
+// ===========================================================================
+
+// Team Profile - Extended details for action teams (NDRF, SDRF, Fire, Police, etc.)
+model TeamProfile {
+  id                      String    @id @default(cuid())
+  userId                  String    @unique @map("user_id")
+  user                    User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  // Team Details
+  teamType                String    @map("team_type") // ndrf, sdrf, fire, police, medical, ambulance, civil_defense
+  teamId                  String?   @map("team_id") // Official team ID (e.g., NDRF-MH-01)
+  badgeNumber             String?   @map("badge_number") // Officer badge number
+  department              String?   // Department name
+  district                String?   // Operating district
+  state                   String    @default("Maharashtra")
+
+  // Skills & Verification
+  specializations         String[]  // JSON array: ["flood_rescue", "medical_first_aid", "search_rescue"]
+  verificationDocumentUrl String?   @map("verification_document_url") // Uploaded ID proof / badge scan URL
+
+  // Duty Status
+  onDuty                  Boolean   @default(false) @map("on_duty")
+  lastDutyToggle          DateTime? @map("last_duty_toggle")
+
+  // Timestamps
+  createdAt               DateTime  @default(now()) @map("created_at")
+  updatedAt               DateTime  @updatedAt @map("updated_at")
+
+  @@index([userId])
+  @@index([teamType])
+  @@index([district])
+  @@index([onDuty])
+  @@map("team_profiles")
+}
+
+// Validation Queue - NDRF admin review queue for action team registrations
+model ValidationQueue {
+  id                String    @id @default(cuid())
+  userId            String    @map("user_id")
+  user              User      @relation("ValidationUser", fields: [userId], references: [id], onDelete: Cascade)
+
+  // Request Details
+  requestedRole     String    @map("requested_role") // Role they want to register as
+  status            String    @default("pending") // pending, approved, rejected
+  documents         Json?     // Uploaded documents: {id_proof: url, badge: url, dept_letter: url}
+  notes             String?   // Applicant's notes/justification
+
+  // Review Details
+  submittedAt       DateTime  @default(now()) @map("submitted_at")
+  reviewedBy        String?   @map("reviewed_by")
+  reviewer          User?     @relation("ValidationReviewer", fields: [reviewedBy], references: [id])
+  reviewedAt        DateTime? @map("reviewed_at")
+  rejectionReason   String?   @map("rejection_reason") // Reason for rejection
+
+  @@index([status])
+  @@index([userId])
+  @@index([submittedAt])
+  @@map("validation_queue")
+}
+
+// Audit Log - Security tracking for sensitive actions
+model AuditLog {
+  id            String   @id @default(cuid())
+  userId        String?  @map("user_id")
+  user          User?    @relation(fields: [userId], references: [id], onDelete: SetNull)
+
+  // Action Details
+  action        String   // LOGIN, LOGOUT, REGISTER, VALIDATE_USER, UPDATE_STATUS, etc.
+  entityType    String?  @map("entity_type") // user, team_profile, incident, resource
+  entityId      String?  @map("entity_id") // ID of affected entity
+  details       Json?    // Additional context: {old_value, new_value, reason}
+
+  // Security Context
+  ipAddress     String?  @map("ip_address")
+  userAgent     String?  @map("user_agent")
+
+  // Timestamp
+  createdAt     DateTime @default(now()) @map("created_at")
+
+  @@index([userId])
+  @@index([action])
+  @@index([createdAt])
+  @@index([entityType, entityId])
+  @@map("audit_logs")
+}
+

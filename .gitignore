@@ -1,0 +1,69 @@
+# Dependencies
+node_modules/
+/.pnp
+.pnp.js
+
+# Testing
+/coverage
+
+# Next.js
+/.next/
+/out/
+
+# Production
+/build
+
+# Misc
+.DS_Store
+*.pem
+
+# Debug
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Local env files
+.env*.local
+.env
+
+# Vercel
+.vercel
+
+# TypeScript
+*.tsbuildinfo
+next-env.d.ts
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+venv/
+ENV/
+env/
+
+# SQLite databases
+*.db
+*.sqlite
+*.sqlite3
+
+# OTP / session stores
+otp-store.json
+
+# Backend env
+backend/.env
+backend/.env.local
+
+# ML Models
+ml_service/saved_models/*.h5
+ml_service/saved_models/*.pkl
+*.weights
+
+# Datasets (large files)
+data/raw/*.csv
+data/raw/*.json
+data/processed/*.csv
+
+# Prisma
+prisma/migrations/*/migration.sql

@@ -1,0 +1,8 @@
+{
+  "last_training_time": "2026-02-20T11:24:44.899877",
+  "total_samples": 131114,
+  "new_samples_added": 59,
+  "accuracy": 0.9767205190179367,
+  "roc_auc": 0.9931615274069903,
+  "model_version": 1
+}
