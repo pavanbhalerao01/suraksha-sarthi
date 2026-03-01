@@ -29,7 +29,6 @@ export async function GET(request: NextRequest) {
         name: true,
         role: true,
         status: true,
-        phoneVerified: true,
         createdAt: true,
         teamProfile: {
           select: {

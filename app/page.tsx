@@ -42,12 +42,6 @@ export default function Home() {
                   Select Portal
                 </Link>
                 <Link
-                  href="/pre-disaster"
-                  className="inline-block bg-green-600 text-white px-8 py-3 rounded-lg font-semibold hover:bg-green-700 transition"
-                >
-                  Pre-Disaster Analysis
-                </Link>
-                <Link
                   href="/post-disaster"
                   className="inline-block bg-red-600 text-white px-8 py-3 rounded-lg font-semibold hover:bg-red-700 transition"
                 >

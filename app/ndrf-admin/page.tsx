@@ -64,6 +64,7 @@ type TabType =
   | "prediction"
   | "tasks"
   | "sos"
+  | "create-disaster"
   | "relief-camps"
   | "analytics";
 
@@ -226,6 +227,11 @@ export default function NDRFAdminDashboard() {
       label: "Predictions",
       icon: Map,
       badge: loading ? "..." : predictions.length > 0 ? predictions.length.toString() : undefined,
+    },
+    {
+      id: "create-disaster" as TabType,
+      label: "Create Disaster",
+      icon: Zap,
     },
     {
       id: "tasks" as TabType,
@@ -399,6 +405,7 @@ export default function NDRFAdminDashboard() {
           {activeTab === "prediction" && <PredictionTab />}
           {activeTab === "tasks" && <TasksTab predictions={predictions} loading={loading} onDispatch={() => setDispatchedTeams((n: number) => n + 1)} />}
           {activeTab === "sos" && <SOSTab onDispatch={() => setDispatchedTeams((n: number) => n + 1)} citizenSosList={citizenSosList} setCitizenSosList={setCitizenSosList} />}
+          {activeTab === "create-disaster" && <CreateDisasterTab />}
           {activeTab === "relief-camps" && <ReliefCampsTab />}
           {activeTab === "analytics" && <AnalyticsTab />}
         </div>
@@ -870,6 +877,340 @@ function PredictionTab() {
               </div>
             </div>
           ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ── Create Disaster Tab ──
+const DISASTER_TYPE_OPTIONS = [
+  { value: "flood", label: "🌊 Flood" },
+  { value: "cyclone", label: "🌀 Cyclone" },
+  { value: "earthquake", label: "🌍 Earthquake" },
+  { value: "landslide", label: "⛰️ Landslide" },
+  { value: "heatwave", label: "🌡️ Heatwave" },
+  { value: "drought", label: "🏜️ Drought" },
+  { value: "fire", label: "🔥 Forest / Urban Fire" },
+  { value: "tsunami", label: "🌊 Tsunami" },
+  { value: "storm", label: "⛈️ Thunderstorm / Lightning" },
+  { value: "coldwave", label: "🥶 Cold Wave" },
+];
+
+const RESPONSE_TEAM_OPTIONS = [
+  { id: "ndrf", name: "🛡️ NDRF Field Team", desc: "National disaster response force" },
+  { id: "sdrf", name: "🔷 SDRF Field Team", desc: "State disaster response force" },
+  { id: "fire", name: "🚒 Fire Services", desc: "Fire, rescue operations" },
+  { id: "police", name: "👮 Police Team", desc: "Security, crowd control" },
+  { id: "medical", name: "🚑 Medical Emergency Team", desc: "Medical emergencies, injuries" },
+  { id: "civil-defense", name: "🏛️ Civil Defense Team", desc: "Civil protection, evacuation" },
+  { id: "relief-camp", name: "🏕️ Relief Camp Incharge", desc: "Relief camp management, shelter" },
+];
+
+function CreateDisasterTab() {
+  const [disasters, setDisasters] = useState<any[]>([]);
+  const [showForm, setShowForm] = useState(false);
+  const [form, setForm] = useState({ disasterType: "flood", severity: "HIGH", location: "", description: "" });
+  const [forwardedMap, setForwardedMap] = useState<Record<string, { teamId: string; teamName: string }>>({});
+  const [blockedTeams, setBlockedTeams] = useState<Record<string, boolean>>({});
+  const [showForwardModal, setShowForwardModal] = useState(false);
+  const [selectedItem, setSelectedItem] = useState<any>(null);
+  const [selectedTeam, setSelectedTeam] = useState<{ id: string; name: string } | null>(null);
+  const [forwardingTeam, setForwardingTeam] = useState(false);
+  const [sendingCitizenAlert, setSendingCitizenAlert] = useState<string | null>(null);
+  const [sendingVolunteerAlert, setSendingVolunteerAlert] = useState<string | null>(null);
+
+  React.useEffect(() => {
+    const fetchBlocked = async () => {
+      try {
+        const res = await fetch("/api/sos/forward-to-team");
+        const data = await res.json();
+        if (data.success && data.blockedTeams) {
+          const b: Record<string, boolean> = {};
+          data.blockedTeams.forEach((t: { teamType: string }) => { b[t.teamType] = true; });
+          setBlockedTeams(b);
+        }
+      } catch { /* ignore */ }
+    };
+    fetchBlocked();
+    const i = setInterval(fetchBlocked, 30000);
+    return () => clearInterval(i);
+  }, []);
+
+  const handleCreate = () => {
+    if (!form.location.trim()) { alert("Please enter a location."); return; }
+    setDisasters((prev) => [{
+      id: `manual-${Date.now()}`,
+      disasterType: form.disasterType,
+      title: `${form.disasterType.charAt(0).toUpperCase() + form.disasterType.slice(1)} Alert — ${form.location}`,
+      description: form.description || `Manually declared ${form.disasterType} disaster alert.`,
+      severity: form.severity,
+      address: form.location,
+      reporter: "NDRF Admin",
+      phone: "N/A",
+      createdAt: new Date().toISOString(),
+    }, ...prev]);
+    setShowForm(false);
+    setForm({ disasterType: "flood", severity: "HIGH", location: "", description: "" });
+  };
+
+  const handleForward = (item: any) => { setSelectedItem(item); setShowForwardModal(true); setSelectedTeam(null); };
+
+  const confirmForward = async () => {
+    if (!selectedItem || !selectedTeam) return;
+    setForwardingTeam(true);
+    try {
+      const res = await fetch("/api/sos/forward-to-team", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          sosId: selectedItem.id, title: selectedItem.title,
+          description: selectedItem.description, disasterType: selectedItem.disasterType,
+          severity: selectedItem.severity, address: selectedItem.address,
+          lat: null, lng: null,
+          reporterName: selectedItem.reporter, reporterPhone: selectedItem.phone,
+          teamType: selectedTeam.id, assignedBy: "NDRF_ADMIN",
+        }),
+      });
+      const data = await res.json();
+      if (data.success) {
+        setForwardedMap((prev) => ({ ...prev, [selectedItem.id]: { teamId: data.data.teamId, teamName: data.data.teamName } }));
+        setShowForwardModal(false); setSelectedItem(null); setSelectedTeam(null);
+        alert(`✅ ${data.message}\n\nTeam ID: ${data.data.teamId}\nTeam: ${data.data.teamName}`);
+        const br = await fetch("/api/sos/forward-to-team");
+        const bd = await br.json();
+        if (bd.success && bd.blockedTeams) {
+          const b: Record<string, boolean> = {};
+          bd.blockedTeams.forEach((t: { teamType: string }) => { b[t.teamType] = true; });
+          setBlockedTeams(b);
+        }
+      } else { alert(data.busy ? `⚠️ ${data.error}` : `❌ Failed: ${data.error}`); }
+    } catch { alert("Failed to forward. Please try again."); }
+    finally { setForwardingTeam(false); }
+  };
+
+  const handleCitizenAlert = async (item: any) => {
+    setSendingCitizenAlert(item.id);
+    try {
+      const res = await fetch("/api/alerts/citizen-sms", {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ disasterType: item.disasterType, severity: item.severity, area: item.address, reporterPhone: item.phone }),
+      });
+      const data = await res.json();
+      alert(data.success ? `✅ Citizen alert sent to area: ${item.address}` : `❌ Failed: ${data.error}`);
+    } catch { alert("Failed to send citizen alert."); }
+    finally { setSendingCitizenAlert(null); }
+  };
+
+  const handleVolunteerAlert = async (item: any) => {
+    setSendingVolunteerAlert(item.id);
+    try {
+      const res = await fetch("/api/alerts/volunteer-sms", {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ disasterType: item.disasterType, area: item.address }),
+      });
+      const data = await res.json();
+      alert(data.success ? `✅ Volunteer alert sent!` : `❌ Failed: ${data.error}`);
+    } catch { alert("Failed to send volunteer alert."); }
+    finally { setSendingVolunteerAlert(null); }
+  };
+
+  return (
+    <div className="space-y-6">
+      <div className="flex items-start justify-between flex-wrap gap-3">
+        <div>
+          <h2 className="text-2xl font-bold text-gray-900 flex items-center gap-2">
+            <Zap className="w-6 h-6 text-red-600" />
+            Create Disaster
+          </h2>
+          <p className="text-gray-600 text-sm mt-1">Manually declare a disaster, then forward to teams and alert citizens / volunteers</p>
+        </div>
+        <button
+          onClick={() => setShowForm(true)}
+          className="flex items-center gap-2 px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition text-sm font-semibold shadow-sm"
+        >
+          <Plus className="w-4 h-4" />
+          New Disaster
+        </button>
+      </div>
+
+      {disasters.length === 0 && (
+        <div className="bg-gray-50 border-2 border-dashed border-gray-300 rounded-xl p-12 text-center">
+          <AlertTriangle className="w-12 h-12 text-gray-300 mx-auto mb-3" />
+          <p className="text-gray-500 font-medium mb-1">No manually created disasters yet</p>
+          <p className="text-gray-400 text-sm">Click "New Disaster" to declare an emergency and manage the response.</p>
+        </div>
+      )}
+
+      {disasters.map((item) => (
+        <div key={item.id} className="bg-red-50 border border-red-200 p-5 rounded-lg">
+          <div className="flex items-start gap-3">
+            <span className="text-3xl">{getDisasterIcon(item.disasterType)}</span>
+            <div className="flex-1">
+              <div className="flex items-center gap-2 flex-wrap mb-1">
+                <span className="font-semibold text-gray-900 text-lg">{item.title}</span>
+                <span className="text-xs px-2 py-1 bg-purple-100 text-purple-700 rounded border border-purple-300 font-semibold">ADMIN CREATED</span>
+                <span className={cn("text-xs px-2 py-1 rounded border", getSeverityColor(item.severity))}>{item.severity}</span>
+              </div>
+              <p className="text-sm text-gray-700 mb-3">{item.description}</p>
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-3">
+                <div className="bg-white p-2 rounded border border-gray-200">
+                  <div className="text-xs text-gray-500"><MapPin className="w-3 h-3 inline" /> Location</div>
+                  <div className="text-sm font-medium text-gray-900">{item.address}</div>
+                </div>
+                <div className="bg-white p-2 rounded border border-gray-200">
+                  <div className="text-xs text-gray-500"><User className="w-3 h-3 inline" /> Created By</div>
+                  <div className="text-sm font-medium text-gray-900">{item.reporter}</div>
+                </div>
+                <div className="bg-white p-2 rounded border border-gray-200">
+                  <div className="text-xs text-gray-500">Disaster Type</div>
+                  <div className="text-sm font-medium text-gray-900 capitalize">{item.disasterType}</div>
+                </div>
+                <div className="bg-white p-2 rounded border border-gray-200">
+                  <div className="text-xs text-gray-500"><Clock className="w-3 h-3 inline" /> Created</div>
+                  <div className="text-sm font-medium text-gray-900">{getRelativeTime(item.createdAt)}</div>
+                </div>
+              </div>
+              <div className="flex gap-2 flex-wrap">
+                {forwardedMap[item.id] ? (
+                  <div className="flex items-center gap-2 px-4 py-2 bg-green-100 border border-green-300 rounded-lg text-sm">
+                    <CheckCircle2 className="w-4 h-4 text-green-700" />
+                    <span className="text-green-800 font-semibold">Forwarded → {forwardedMap[item.id].teamName}</span>
+                    <span className="ml-1 px-2 py-0.5 bg-green-600 text-white text-xs rounded font-mono font-bold">ID: {forwardedMap[item.id].teamId}</span>
+                  </div>
+                ) : (
+                  <button onClick={() => handleForward(item)} className="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition text-sm font-medium flex items-center gap-2">
+                    📤 Forward SOS
+                  </button>
+                )}
+                <button onClick={() => handleCitizenAlert(item)} disabled={sendingCitizenAlert === item.id}
+                  className="px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition text-sm font-medium disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2">
+                  {sendingCitizenAlert === item.id ? <>⏳ Sending...</> : <>📱 Citizen Alert</>}
+                </button>
+                <button onClick={() => handleVolunteerAlert(item)} disabled={sendingVolunteerAlert === item.id}
+                  className="px-4 py-2 bg-orange-600 text-white rounded-lg hover:bg-orange-700 transition text-sm font-medium disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2">
+                  {sendingVolunteerAlert === item.id ? <>⏳ Sending SMS...</> : <>📢 Alert Volunteers</>}
+                </button>
+                <button onClick={() => { if (confirm("Remove this disaster alert?")) setDisasters((p) => p.filter((d) => d.id !== item.id)); }}
+                  className="px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition text-sm font-medium">
+                  ⛔ Mark as False
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      ))}
+
+      {showForm && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-xl shadow-2xl max-w-lg w-full">
+            <div className="bg-gradient-to-r from-red-600 to-orange-600 text-white p-6 rounded-t-xl flex items-center justify-between">
+              <div>
+                <h3 className="text-xl font-bold flex items-center gap-2"><AlertTriangle className="w-5 h-5" /> Create Disaster Alert</h3>
+                <p className="text-red-100 text-sm mt-1">Manually declare a disaster and manage the response</p>
+              </div>
+              <button onClick={() => setShowForm(false)} className="text-white hover:bg-white/20 rounded-full p-2 transition"><XCircle className="w-5 h-5" /></button>
+            </div>
+            <div className="p-6 space-y-4">
+              <div>
+                <label className="block text-sm font-semibold text-gray-700 mb-1">Disaster Type <span className="text-red-500">*</span></label>
+                <select value={form.disasterType} onChange={(e) => setForm((f) => ({ ...f, disasterType: e.target.value }))}
+                  className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-red-400 bg-white">
+                  {DISASTER_TYPE_OPTIONS.map((dt) => <option key={dt.value} value={dt.value}>{dt.label}</option>)}
+                </select>
+              </div>
+              <div>
+                <label className="block text-sm font-semibold text-gray-700 mb-1">Severity <span className="text-red-500">*</span></label>
+                <select value={form.severity} onChange={(e) => setForm((f) => ({ ...f, severity: e.target.value }))}
+                  className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-red-400 bg-white">
+                  <option value="LOW">🟢 Low</option>
+                  <option value="MODERATE">🟡 Moderate</option>
+                  <option value="HIGH">🟠 High</option>
+                  <option value="CRITICAL">🔴 Critical</option>
+                </select>
+              </div>
+              <div>
+                <label className="block text-sm font-semibold text-gray-700 mb-1">Location / Area <span className="text-red-500">*</span></label>
+                <input type="text" placeholder="e.g. Sinhagad Road, Pune, Maharashtra"
+                  value={form.location} onChange={(e) => setForm((f) => ({ ...f, location: e.target.value }))}
+                  className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-red-400" />
+              </div>
+              <div>
+                <label className="block text-sm font-semibold text-gray-700 mb-1">Description (optional)</label>
+                <textarea rows={3} placeholder="Describe the situation..."
+                  value={form.description} onChange={(e) => setForm((f) => ({ ...f, description: e.target.value }))}
+                  className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-red-400 resize-none" />
+              </div>
+            </div>
+            <div className="flex justify-end gap-3 px-6 pb-6">
+              <button onClick={() => setShowForm(false)} className="px-5 py-2 border border-gray-300 rounded-lg hover:bg-gray-50 bg-white transition font-medium text-sm">Cancel</button>
+              <button onClick={handleCreate} className="px-5 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition font-semibold text-sm flex items-center gap-2">
+                <Plus className="w-4 h-4" /> Create Disaster
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {showForwardModal && selectedItem && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-xl shadow-2xl max-w-2xl w-full max-h-[90vh] flex flex-col">
+            <div className="bg-gradient-to-r from-green-600 to-emerald-600 text-white p-6 rounded-t-xl flex items-center justify-between">
+              <div>
+                <h3 className="text-2xl font-bold flex items-center gap-2"><Send className="w-6 h-6" /> Forward SOS to Response Team</h3>
+                <p className="text-green-100 mt-1">Select the appropriate team to handle this emergency</p>
+              </div>
+              <button onClick={() => { setShowForwardModal(false); setSelectedItem(null); setSelectedTeam(null); }} className="text-white hover:bg-white/20 rounded-full p-2 transition"><XCircle className="w-6 h-6" /></button>
+            </div>
+            <div className="p-6 space-y-4 overflow-y-auto flex-1">
+              <div className="bg-gray-50 border border-gray-200 rounded-lg p-4">
+                <h5 className="font-semibold text-gray-900 mb-2">📋 Incident Details</h5>
+                <div className="space-y-1 text-sm">
+                  <div><span className="text-gray-600">Type:</span> <span className="font-medium text-gray-900 capitalize">{selectedItem.disasterType}</span></div>
+                  <div><span className="text-gray-600">Title:</span> <span className="font-medium text-gray-900">{selectedItem.title}</span></div>
+                  <div><span className="text-gray-600">Location:</span> <span className="font-medium text-gray-900">{selectedItem.address}</span></div>
+                  <div><span className="text-gray-600">Severity:</span> <span className="font-medium text-red-600">{selectedItem.severity}</span></div>
+                </div>
+              </div>
+              <div>
+                <h5 className="font-semibold text-gray-900 mb-3">🚨 Select Response Team:</h5>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                  {RESPONSE_TEAM_OPTIONS.map((team) => {
+                    const isBusy = blockedTeams[team.id];
+                    const isSelected = selectedTeam?.id === team.id;
+                    return (
+                      <button key={team.id} onClick={() => !isBusy && setSelectedTeam({ id: team.id, name: team.name })} disabled={isBusy}
+                        className={cn("text-left p-4 rounded-lg border-2 transition-all",
+                          isBusy ? "border-red-200 bg-red-50 opacity-70 cursor-not-allowed"
+                            : isSelected ? "border-green-600 bg-green-50"
+                            : "border-gray-200 bg-white hover:border-green-300 hover:bg-green-50")}>
+                        <div className="font-semibold text-gray-900 mb-1 flex items-center gap-2">
+                          {team.name}
+                          {isBusy && <span className="ml-auto px-2 py-0.5 bg-red-600 text-white text-xs rounded-full font-bold">BUSY</span>}
+                        </div>
+                        <div className="text-xs text-gray-600">{team.desc}</div>
+                        {isBusy && <div className="text-xs text-red-600 mt-1 font-medium">Team currently responding to an incident</div>}
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+              {selectedTeam && (
+                <div className="bg-green-50 border border-green-200 rounded-lg p-4">
+                  <p className="text-sm text-green-800 flex items-center gap-2">
+                    <CheckCircle2 className="w-4 h-4" />
+                    <span>Selected: <strong>{selectedTeam.name}</strong></span>
+                  </p>
+                </div>
+              )}
+            </div>
+            <div className="flex justify-end gap-3 p-6 border-t bg-gray-50 rounded-b-xl">
+              <button onClick={() => { setShowForwardModal(false); setSelectedItem(null); setSelectedTeam(null); }} className="px-6 py-2 border border-gray-300 rounded-lg hover:bg-gray-50 bg-white transition font-medium" disabled={forwardingTeam}>Cancel</button>
+              <button onClick={confirmForward} disabled={!selectedTeam || forwardingTeam} className="px-6 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition font-medium disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2">
+                {forwardingTeam ? <><div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" /> Forwarding...</> : <><Send className="w-4 h-4" /> Forward to Team</>}
+              </button>
+            </div>
+          </div>
         </div>
       )}
     </div>

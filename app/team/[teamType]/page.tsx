@@ -44,17 +44,24 @@ function parseGpsFromAddress(text: string): { lat: number; lng: number } | null 
 // ── Leaflet route map inside Navigate modal ──
 function RouteLeafletMap({ from, to }: { from: { lat: number; lng: number } | null; to: { lat: number; lng: number } }) {
   const mapRef = useRef<HTMLDivElement>(null);
+  const mapInstanceRef = useRef<any>(null);
   useEffect(() => {
     if (!mapRef.current) return;
-    let mapInstance: any = null;
     import("leaflet").then((L) => {
       import("leaflet/dist/leaflet.css" as any);
       const container = mapRef.current!;
-      if ((container as any)._leaflet_id) (L as any).DomUtil.empty(container);
+      // Destroy any existing map on this container
+      if (mapInstanceRef.current) {
+        mapInstanceRef.current.remove();
+        mapInstanceRef.current = null;
+      } else if ((container as any)._leaflet_id) {
+        (L as any).map(container).remove();
+      }
       const points: [number, number][] = from
         ? [[from.lat, from.lng], [to.lat, to.lng]]
         : [[to.lat, to.lng]];
-      mapInstance = (L as any).map(container).fitBounds(points, { padding: [40, 40] });
+      const mapInstance = (L as any).map(container).fitBounds(points, { padding: [40, 40] });
+      mapInstanceRef.current = mapInstance;
       (L as any).tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
         attribution: "© OpenStreetMap contributors",
       }).addTo(mapInstance);
@@ -66,7 +73,12 @@ function RouteLeafletMap({ from, to }: { from: { lat: number; lng: number } | nu
       (L as any).circleMarker([to.lat, to.lng], { radius: 12, color: "#dc2626", fillColor: "#ef4444", fillOpacity: 0.9 })
         .bindPopup("Victim Location").addTo(mapInstance);
     });
-    return () => { if (mapInstance) mapInstance.remove(); };
+    return () => {
+      if (mapInstanceRef.current) {
+        mapInstanceRef.current.remove();
+        mapInstanceRef.current = null;
+      }
+    };
   }, [from, to]);
   return <div ref={mapRef} className="w-full h-72 rounded-lg overflow-hidden" />;
 }
